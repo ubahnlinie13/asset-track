@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetTrack (Supabase)</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body { font-family: Arial; background:#111; color:#fff; margin:0; }
+header { padding:20px; background:#1a1a1a; display:flex; justify-content:space-between; }
+.tabs { display:flex; background:#222; padding:10px; gap:10px; }
+.tab { cursor:pointer; padding:8px 12px; background:#333; }
+.tab.active { background:#e8ff47; color:#000; }
+
+.view { display:none; padding:20px; }
+.view.active { display:block; }
+
+table { width:100%; border-collapse:collapse; margin-top:10px; }
+td,th { border-bottom:1px solid #333; padding:8px; }
+
+button { padding:6px 10px; cursor:pointer; }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>AssetTrack</h1>
+  <button onclick="openAddAsset()">+ Asset</button>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+  <div class="tab" onclick="switchTab('assets')">Assets</div>
+  <div class="tab" onclick="switchTab('loans')">Loans</div>
+  <div class="tab" onclick="switchTab('history')">History</div>
+</div>
+
+<main>
+
+<div id="view-dashboard" class="view active">
+  <h2>Dashboard</h2>
+  <div id="stats"></div>
+</div>
+
+<div id="view-assets" class="view">
+  <table>
+    <thead><tr><th>Name</th><th>Action</th></tr></thead>
+    <tbody id="assets-table"></tbody>
+  </table>
+</div>
+
+<div id="view-loans" class="view">
+  <table>
+    <thead><tr><th>Person</th><th>Action</th></tr></thead>
+    <tbody id="loans-table"></tbody>
+  </table>
+</div>
+
+<div id="view-history" class="view">
+  <table>
+    <thead><tr><th>Asset</th><th>Person</th></tr></thead>
+    <tbody id="history-table"></tbody>
+  </table>
+</div>
+
+</main>
+
+<script>
+/* ================= SUPABASE ================= */
+
+const SUPABASE_URL = "https://ugdoqrbiampugaivjisy.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_CyG4q8nx6k0L46B2NPECfg_p9jJagsK";
+
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ================= STATE ================= */
+
+let assets = [];
+let loans = [];
+let history = [];
+
+/* ================= LOAD ================= */
+
+async function loadAll() {
+  const [{ data: a }, { data: l }, { data: h }] = await Promise.all([
+    client.from("assets").select("*"),
+    client.from("loans").select("*"),
+    client.from("history").select("*")
+  ]);
+
+  assets = a || [];
+  loans = l || [];
+  history = h || [];
+
+  renderAll();
+}
+
+/* ================= REALTIME ================= */
+
+function initRealtime() {
+  client.channel("sync")
+    .on("postgres_changes", { event: "*", schema: "public", table: "assets" }, loadAll)
+    .on("postgres_changes", { event: "*", schema: "public", table: "loans" }, loadAll)
+    .on("postgres_changes", { event: "*", schema: "public", table: "history" }, loadAll)
+    .subscribe();
+}
+
+/* ================= UI ================= */
+
+function switchTab(tab) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-" + tab).classList.add("active");
+
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  event.target.classList.add("active");
+}
+
+/* ================= RENDER ================= */
+
+function renderAll() {
+
+  document.getElementById("assets-table").innerHTML =
+    assets.map(a => `
+      <tr>
+        <td>${a.name}</td>
+        <td><button onclick="deleteAsset('${a.id}')">Delete</button></td>
+      </tr>
+    `).join("");
+
+  document.getElementById("loans-table").innerHTML =
+    loans.map(l => `
+      <tr>
+        <td>${l.person || "-"}</td>
+        <td><button onclick="returnAsset('${l.id}')">Return</button></td>
+      </tr>
+    `).join("");
+
+  document.getElementById("history-table").innerHTML =
+    history.map(h => `
+      <tr>
+        <td>${h.asset_name || "-"}</td>
+        <td>${h.person || "-"}</td>
+      </tr>
+    `).join("");
+
+  document.getElementById("stats").innerText =
+    `Assets: ${assets.length} | Loans: ${loans.length} | History: ${history.length}`;
+}
+
+/* ================= ACTIONS ================= */
+
+async function openAddAsset() {
+  const name = prompt("Asset Name?");
+  if (!name) return;
+
+  await client.from("assets").insert([{
+    id: Date.now().toString(),
+    name
+  }]);
+
+  loadAll();
+}
+
+async function deleteAsset(id) {
+  await client.from("assets").delete().eq("id", id);
+  loadAll();
+}
+
+async function saveLoan() {
+  await client.from("loans").insert([{
+    id: Date.now().toString(),
+    person: "Test User",
+    asset_id: assets[0]?.id
+  }]);
+
+  loadAll();
+}
+
+async function returnAsset(id) {
+  const loan = loans.find(l => l.id === id);
+  if (!loan) return;
+
+  await client.from("history").insert([{
+    id: Date.now().toString(),
+    asset_name: "Asset",
+    person: loan.person
+  }]);
+
+  await client.from("loans").delete().eq("id", id);
+
+  loadAll();
+}
+
+/* ================= START ================= */
+
+loadAll();
+initRealtime();
+
+</script>
+
+</body>
+</html>
