@@ -6,7 +6,7 @@
 <title>Asset Management (Supabase)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght=400;500&family=Syne:wght=400;600;700;800&display=swap');
@@ -731,7 +731,10 @@ function importUsersExcel(event) {
 }
  
 initRole();
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght=400;500&family=Syne:wght=400;600;700;800&display=swap');
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+</style>
 
 :root {
   --bg:#0f0f0f;
@@ -848,14 +851,13 @@ td,th{padding:12px;border-bottom:1px solid var(--border);font-size:14px}
    SUPABASE INIT
 ========================= */
 
-const SUPABASE_URL = "https://ugdoqrbiampugaivjisy.supabase.co/rest/v1/";
+const SUPABASE_URL = "https://ugdoqrbiampugaivjisy.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_CyG4q8nx6k0L46B2NPECfg_p9jJagsK";
 
-const supabase = window.supabase.createClient(
+const supabase = supabase.createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY
 );
-
 /* =========================
    STATE
 ========================= */
