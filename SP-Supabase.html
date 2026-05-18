@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asset Management (Supabase)</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght=400;500&family=Syne:wght=400;600;700;800&display=swap');
+ 
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #2e2e2e;
+    --accent: #e8ff47;
+    --accent2: #47c8ff;
+    --danger: #ff4747;
+    --text: #f0f0f0;
+    --muted: #666;
+    --green: #47ffb0;
+  }
+ 
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+  }
+ 
+  header {
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+  }
+  header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+  header h1 span { color: var(--accent); }
+  .header-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+ 
+  .role-select-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    padding: 4px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .role-select-wrap label { margin-bottom: 0; font-size: 11px; }
+  .role-select {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+    padding: 4px 0;
+    width: auto;
+  }
+ 
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0 32px;
+  }
+  .tab {
+    padding: 14px 22px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  
+  body.role-user .admin-only { display: none !important; }
+ 
+  main { padding: 32px; max-width: 1200px; margin: 0 auto; }
+  .view { display: none; }
+  .view.active { display: block; }
+ 
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-family: 'DM Mono', monospace;
+  }
+  .stat-value { font-size: 36px; font-weight: 800; line-height: 1; }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.blue { color: var(--accent2); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--danger); }
+ 
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .section-title { font-size: 16px; font-weight: 700; }
+ 
+  .btn {
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #d4e830; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
+  .btn-blue { background: var(--accent2); color: #000; }
+  .btn-green { background: var(--green); color: #000; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+ 
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--surface2); }
+  th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+  }
+  td { padding: 14px 16px; font-size: 14px; border-top: 1px solid var(--border); }
+  tr:hover td { background: var(--surface2); }
+ 
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'DM Mono', monospace;
+  }
+  .badge-available { background: rgba(71,255,176,0.15); color: var(--green); }
+  .badge-loaned { background: rgba(255,71,71,0.15); color: var(--danger); }
+ 
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    width: 460px;
+    max-width: 95vw;
+  }
+  .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+ 
+  /* SPEZIELLES NOTIFICATION POPUP STYLE */
+  .modal-notify { text-align: center; width: 400px; padding: 32px 24px; }
+  .modal-notify h3 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+  .modal-notify p { font-size: 14px; color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+  .notify-icon { font-size: 48px; margin-bottom: 16px; display: block; }
+  .notify-success .notify-icon { color: var(--green); }
+  .notify-error .notify-icon { color: var(--danger); }
+  .notify-info .notify-icon { color: var(--accent2); }
+
+  .form-group { margin-bottom: 16px; position: relative; }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: 'DM Mono', monospace;
+  }
+  .optional { color: #444; font-size: 10px; margin-left: 4px; text-transform: none; }
+  input, select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+ 
+  .form-row { display: flex; gap: 12px; }
+  .form-row .form-group { flex: 1; }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+ 
+  .search-bar { position: relative; margin-bottom: 16px; }
+  .search-bar input { padding-left: 36px; }
+  .search-bar::before { content: '⌕'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; }
+ 
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .mono { font-family: 'DM Mono', monospace; font-size: 13px; }
+  .actions-cell { display: flex; gap: 6px; }
+ 
+  .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 768px) { .quick-grid { grid-template-columns: 1fr; } }
+  .quick-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; }
+  .quick-panel h2 { font-size: 16px; font-weight: 700; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
+  .quick-panel h2 .pill { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-family: 'DM Mono', monospace; font-weight: 500; }
+  .pill-leihen { background: rgba(232,255,71,0.15); color: var(--accent); }
+  .pill-return { background: rgba(71,200,255,0.15); color: var(--accent2); }
+ 
+  .return-results { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .return-item { display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; font-size: 14px; }
+  .return-item-name { font-weight: 600; }
+  .return-item-date { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); margin-top: 2px; }
+ 
+  .autofill-suggestions {
+    position: absolute; top: 100%; left: 0; right: 0; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 99; box-shadow: 0 8px 16px rgba(0,0,0,0.5); display: none;
+  }
+  .autofill-suggestion-item { padding: 10px 14px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+  .autofill-suggestion-item:hover { background: var(--border); color: var(--accent); }
+  .autofill-id { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 11px; }
+</style>
+</head>
+<body>
+ 
+<header>
+  <h1>Asset<span>Track</span></h1>
+  <div class="header-actions">
+    <div class="role-select-wrap">
+      <label>Rolle:</label>
+      <select class="role-select" id="global-role-select" onchange="handleRoleChange(this.value)">
+        <option value="admin">Admin</option>
+        <option value="user">User</option>
+      </select>
+    </div>
+    <label class="btn btn-green admin-only" style="cursor:pointer">
+      👥 User-Liste Import
+      <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importUsersExcel(event)">
+    </label>
+    <button class="btn btn-secondary admin-only" onclick="exportExcel()">⬇ Excel Export</button>
+  </div>
+</header>
+ 
+<div class="tabs">
+  <div class="tab admin-only" id="tab-dashboard" onclick="switchTab('dashboard')">Dashboard</div>
+  <div class="tab admin-only" id="tab-assets" onclick="switchTab('assets')">Assets</div>
+  <div class="tab admin-only" id="tab-loans" onclick="switchTab('loans')">Ausleihen</div>
+  <div class="tab admin-only" id="tab-history" onclick="switchTab('history')">Historie</div>
+  <div class="tab" id="tab-quick" onclick="switchTab('quick')">Schnellzugang</div>
+</div>
+ 
+<main>
+  <div class="view admin-only" id="view-dashboard">
+    <div class="stats">
+      <div class="stat-card"><div class="stat-label">Assets gesamt</div><div class="stat-value accent" id="stat-total">0</div></div>
+      <div class="stat-card"><div class="stat-label">Verfügbar</div><div class="stat-value green" id="stat-available">0</div></div>
+      <div class="stat-card"><div class="stat-label">Ausgeliehen</div><div class="stat-value red" id="stat-loaned">0</div></div>
+      <div class="stat-card"><div class="stat-label">Ausleihen gesamt</div><div class="stat-value blue" id="stat-loans">0</div></div>
+    </div>
+    <div class="section-header"><div class="section-title">Aktuell ausgeliehen</div></div>
+    <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Seit</th><th>Aktion</th></tr></thead><tbody id="active-loans-table"></tbody></table></div>
+  </div>
+ 
+  <div class="view admin-only" id="view-assets">
+    <div class="section-header"><div class="section-title">Assets verwalten</div><button class="btn btn-primary" onclick="openAddAsset()">+ Asset hinzufügen</button></div>
+    <div class="search-bar"><input type="text" id="asset-search" placeholder="Assets durchsuchen..." oninput="renderAssets()"></div>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Kategorie</th><th>Seriennummer</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="assets-table"></tbody></table></div>
+  </div>
+ 
+  <div class="view admin-only" id="view-loans">
+    <div class="section-header"><div class="section-title">Alle aktiven Ausleihen</div><button class="btn btn-primary" onclick="openLoanModal()">+ Ausleihe erfassen</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Ausgeliehen am</th><th>Aktion</th></tr></thead><tbody id="loans-table"></tbody></table></div>
+  </div>
+ 
+  <div class="view admin-only" id="view-history">
+    <div class="section-header"><div class="section-title">Ausleih-Historie</div></div>
+    <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Ausgeliehen</th><th>Zurückgegeben</th></tr></thead><tbody id="history-table"></tbody></table></div>
+  </div>
+ 
+  <div class="view" id="view-quick">
+    <div class="quick-grid">
+      <div class="quick-panel">
+        <h2>Ausleihen <span class="pill pill-leihen">LIVE</span></h2>
+        <div class="form-group"><label>Asset *</label><select id="quick-asset"></select></div>
+        <div class="form-group">
+          <label>Name *</label>
+          <input type="text" id="quick-person" placeholder="Max Mustermann" oninput="handleUserAutofill(this, 'name')" autocomplete="off">
+          <div id="quick-person-suggestions" class="autofill-suggestions"></div>
+        </div>
+        <div class="form-group">
+          <label>User ID <span class="optional">(optional)</span></label>
+          <input type="text" id="quick-userid" placeholder="X123456" oninput="handleUserAutofill(this, 'id')" autocomplete="off">
+          <div id="quick-userid-suggestions" class="autofill-suggestions"></div>
+        </div>
+        <div class="form-group"><label>Datum</label><input type="date" id="quick-date"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="quickLoan()">Ausleihe erfassen</button>
+      </div>
+ 
+      <div class="quick-panel">
+        <h2>Rückgabe <span class="pill pill-return">SCAN</span></h2>
+        <div class="form-group">
+          <label>Name oder User ID eingeben</label>
+          <input type="text" id="return-search" placeholder="Eingeben zum Suchen..." oninput="handleReturnAutofill(this)" autocomplete="off">
+          <div id="return-search-suggestions" class="autofill-suggestions"></div>
+        </div>
+        <div id="return-results"></div>
+      </div>
+    </div>
+  </div>
+</main>
+ 
+<div class="modal-overlay" id="modal-asset">
+  <div class="modal">
+    <h2 id="modal-asset-title">Asset hinzufügen</h2>
+    <input type="hidden" id="asset-id">
+    <div class="form-group"><label>Name *</label><input type="text" id="asset-name" placeholder="z.B. Dell Monitor"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Kategorie</label><input type="text" id="asset-category" placeholder="z.B. Monitor"></div>
+      <div class="form-group"><label>Seriennummer</label><input type="text" id="asset-serial" placeholder="SN-123"></div>
+    </div>
+    <div class="form-group"><label>Anzahl</label><input type="number" id="asset-qty" value="1" min="1"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-asset')">Abbrechen</button><button class="btn btn-primary" onclick="saveAsset()">Speichern</button></div>
+  </div>
+</div>
+ 
+<div class="modal-overlay" id="modal-loan">
+  <div class="modal">
+    <h2>Ausleihe erfassen</h2>
+    <div class="form-group"><label>Asset *</label><select id="loan-asset"></select></div>
+    <div class="form-group">
+      <label>Name der Person *</label>
+      <input type="text" id="loan-person" placeholder="Name" oninput="handleUserAutofill(this, 'name', true)" autocomplete="off">
+      <div id="loan-person-suggestions" class="autofill-suggestions"></div>
+    </div>
+    <div class="form-group">
+      <label>User ID</label>
+      <input type="text" id="loan-userid" placeholder="ID" oninput="handleUserAutofill(this, 'id', true)" autocomplete="off">
+      <div id="loan-userid-suggestions" class="autofill-suggestions"></div>
+    </div>
+    <div class="form-group"><label>Datum</label><input type="date" id="loan-date"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-loan')">Abbrechen</button><button class="btn btn-primary" onclick="saveLoan()">Ausleihe erfassen</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-notification">
+  <div class="modal modal-notify" id="notify-wrapper">
+    <span class="notify-icon" id="notify-icon">✓</span>
+    <h3 id="notify-title">Erfolgreich</h3>
+    <p id="notify-message">Nachricht hier...</p>
+    <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="closeModal('modal-notification')">Weiter</button>
+  </div>
+</div>
+ 
+<script>
+let assets = JSON.parse(localStorage.getItem('am_assets')) || [];
+let loans = JSON.parse(localStorage.getItem('am_loans')) || [];
+let history = JSON.parse(localStorage.getItem('am_history')) || [];
+let importedUsers = JSON.parse(localStorage.getItem('am_users')) || [];
+let currentRole = localStorage.getItem('am_role') || 'admin';
+let currentTab = 'dashboard';
+ 
+function saveToStorage() {
+  localStorage.setItem('am_assets', JSON.stringify(assets));
+  localStorage.setItem('am_loans', JSON.stringify(loans));
+  localStorage.setItem('am_history', JSON.stringify(history));
+}
+
+// Custom Popup-Notification Trigger
+function showNotification(title, message, type = 'success') {
+  const wrapper = document.getElementById('notify-wrapper');
+  const iconEl = document.getElementById('notify-icon');
+  const titleEl = document.getElementById('notify-title');
+  const msgEl = document.getElementById('notify-message');
+  
+  wrapper.className = 'modal modal-notify notify-' + type;
+  titleEl.textContent = title;
+  msgEl.textContent = message;
+  
+  if (type === 'success') iconEl.textContent = '✓';
+  else if (type === 'error') iconEl.textContent = '✕';
+  else iconEl.textContent = 'ℹ';
+  
+  document.getElementById('modal-notification').classList.add('open');
+}
+ 
+function handleRoleChange(newRole) {
+  currentRole = newRole;
+  localStorage.setItem('am_role', currentRole);
+  initRole();
+}
+ 
+function initRole() {
+  document.getElementById('global-role-select').value = currentRole;
+  if (currentRole === 'user') {
+    document.body.classList.add('role-user');
+    switchTab('quick');
+  } else {
+    document.body.classList.remove('role-user');
+    switchTab('dashboard');
+  }
+}
+ 
+function switchTab(tab) {
+  if (currentRole === 'user' && tab !== 'quick') tab = 'quick';
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + tab).classList.add('active');
+  if (tab === 'quick') initQuickTab();
+  renderAll();
+}
+ 
+function renderAll() {
+  if (currentRole === 'admin') {
+    renderDashboard(); renderAssets(); renderLoans(); renderHistory();
+  } else {
+    fillQuickSelect();
+  }
+}
+ 
+function renderDashboard() {
+  const total = assets.reduce((s, a) => s + (parseInt(a.qty) || 1), 0);
+  const loaned = loans.length;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-available').textContent = Math.max(0, total - loaned);
+  document.getElementById('stat-loaned').textContent = loaned;
+  document.getElementById('stat-loans').textContent = history.length + loaned;
+ 
+  const tbody = document.getElementById('active-loans-table');
+  if (loans.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty"><div class="empty-icon">✓</div><p>Keine aktiven Ausleihen</p></div></td></tr>`;
+  } else {
+    tbody.innerHTML = loans.map(l => {
+      const asset = assets.find(a => a.id === l.assetId);
+      return `<tr><td><strong>${asset ? asset.name : '?'}</strong></td><td>${l.person}</td><td class="mono">${l.userId || '–'}</td><td class="mono">${l.date}</td><td><button class="btn btn-sm btn-secondary" onclick="returnAsset('${l.id}')">Zurückgeben</button></td></tr>`;
+    }).join('');
+  }
+}
+ 
+function renderAssets() {
+  const q = document.getElementById('asset-search')?.value.toLowerCase() || '';
+  const filtered = assets.filter(a => a.name.toLowerCase().includes(q) || (a.category||'').toLowerCase().includes(q));
+  const tbody = document.getElementById('assets-table');
+  if (!tbody) return;
+  tbody.innerHTML = filtered.map(a => {
+    const activeLoans = loans.filter(l => l.assetId === a.id).length;
+    const avail = (parseInt(a.qty) || 1) - activeLoans;
+    return `<tr><td><strong>${a.name}</strong></td><td>${a.category || '–'}</td><td class="mono">${a.serial || '–'}</td><td>${avail > 0 ? `<span class="badge badge-available">${avail} frei</span>` : `<span class="badge badge-loaned">voll</span>`}</td><td><div class="actions-cell"><button class="btn btn-sm btn-secondary" onclick="openEditAsset('${a.id}')">Bearbeiten</button><button class="btn btn-sm btn-danger" onclick="deleteAsset('${a.id}')">✕</button></div></td></tr>`;
+  }).join('');
+}
+ 
+function renderLoans() {
+  const tbody = document.getElementById('loans-table');
+  if (!tbody) return;
+  tbody.innerHTML = loans.map(l => {
+    const asset = assets.find(a => a.id === l.assetId);
+    return `<tr><td><strong>${asset ? asset.name : '?'}</strong></td><td>${l.person}</td><td class="mono">${l.userId || '–'}</td><td class="mono">${l.date}</td><td><button class="btn btn-sm btn-blue" onclick="returnAsset('${l.id}')">✓ Zurückgeben</button></td></tr>`;
+  }).join('');
+}
+ 
+function renderHistory() {
+  const tbody = document.getElementById('history-table');
+  if (!tbody) return;
+  tbody.innerHTML = [...history].reverse().map(h => `<tr><td><strong>${h.assetName || '?'}</strong></td><td>${h.person}</td><td class="mono">${h.userId || '–'}</td><td class="mono">${h.loanDate}</td><td class="mono">${h.returnDate}</td></tr>`).join('');
+}
+ 
+function initQuickTab() {
+  fillQuickSelect();
+  if(document.getElementById('quick-person')) document.getElementById('quick-person').value = '';
+  if(document.getElementById('quick-userid')) document.getElementById('quick-userid').value = '';
+  if(document.getElementById('return-search')) document.getElementById('return-search').value = '';
+  if(document.getElementById('return-results')) document.getElementById('return-results').innerHTML = '';
+  if(document.getElementById('quick-date')) document.getElementById('quick-date').value = new Date().toISOString().split('T')[0];
+}
+ 
+function fillQuickSelect() {
+  const sel = document.getElementById('quick-asset');
+  if (!sel) return;
+  const avail = assets.filter(a => loans.filter(l => l.assetId === a.id).length < (parseInt(a.qty) || 1));
+  sel.innerHTML = avail.length === 0 ? '<option value="">Keine Assets frei</option>' : avail.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+}
+ 
+function quickLoan() {
+  const assetId = document.getElementById('quick-asset').value;
+  const person = document.getElementById('quick-person').value.trim();
+  const userId = document.getElementById('quick-userid').value.trim();
+  const date = document.getElementById('quick-date').value;
+  if (!person || !assetId) { showNotification('Fehler', 'Bitte alle Pflichtfelder ausfüllen!', 'error'); return; }
+  
+  const userExists = importedUsers.some(u => u.name.toLowerCase() === person.toLowerCase() && (!userId || u.id.toLowerCase() === userId.toLowerCase()));
+  if (!userExists) {
+    showNotification('Fehler', 'Benutzer existiert nicht in der hinterlegten User-Liste! Bitte wähle einen Namen aus den Vorschlägen.', 'error');
+    return;
+  }
+  
+  loans.push({ id: Date.now().toString(), assetId, person, userId, date });
+  saveToStorage(); initQuickTab(); renderAll();
+  showNotification('Erfolg', 'Ausleihe erfolgreich im System erfasst!', 'success');
+}
+ 
+function searchForReturn(selectedNameOrId) {
+  const container = document.getElementById('return-results');
+  if (!selectedNameOrId) { container.innerHTML = ''; return; }
+  
+  const q = selectedNameOrId.toLowerCase();
+  const matches = loans.filter(l => l.person.toLowerCase() === q || (l.userId || '').toLowerCase() === q);
+  
+  if (matches.length === 0) { 
+    container.innerHTML = '<p class="empty">Diese Person hat aktuell keine offenen Ausleihen.</p>'; 
+    return; 
+  }
+  
+  container.innerHTML = `<div class="return-results">` + matches.map(l => {
+    const asset = assets.find(a => a.id === l.assetId);
+    return `<div class="return-item"><div><strong>${asset ? asset.name : '?'}</strong><div class="return-item-date">${l.person} (${l.userId || '–'})</div></div><button class="btn btn-sm btn-green" onclick="returnAsset('${l.id}')">↩ Zurück</button></div>`;
+  }).join('') + `</div>`;
+}
+ 
+function handleUserAutofill(inputEl, type, isModal = false) {
+  const prefix = isModal ? 'loan-' : 'quick-';
+  const val = inputEl.value.trim().toLowerCase();
+  const listEl = document.getElementById(prefix + (type === 'name' ? 'person' : 'userid') + '-suggestions');
+  if (val.length < 1 || importedUsers.length === 0) { listEl.style.display = 'none'; return; }
+  
+  const matches = importedUsers.filter(u => u.name.toLowerCase().includes(val) || u.id.toLowerCase().includes(val)).slice(0, 10);
+  if (matches.length === 0) { listEl.style.display = 'none'; return; }
+  
+  listEl.innerHTML = matches.map(u => `<div class="autofill-suggestion-item" onclick="selectUserSuggestion('${u.name.replace(/'/g, "\\'")}', '${u.id.replace(/'/g, "\\'")}', '${prefix}')"><span>${u.name}</span><span class="autofill-id">${u.id}</span></div>`).join('');
+  listEl.style.display = 'block';
+}
+ 
+function selectUserSuggestion(name, id, prefix) {
+  document.getElementById(prefix + 'person').value = name;
+  document.getElementById(prefix + 'userid').value = id;
+  document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none');
+}
+ 
+function handleReturnAutofill(inputEl) {
+  const val = inputEl.value.trim().toLowerCase();
+  const listEl = document.getElementById('return-search-suggestions');
+  if (val.length < 1 || importedUsers.length === 0) { listEl.style.display = 'none'; return; }
+  
+  const matches = importedUsers.filter(u => u.name.toLowerCase().includes(val) || u.id.toLowerCase().includes(val)).slice(0, 10);
+  if (matches.length === 0) { listEl.style.display = 'none'; return; }
+  
+  listEl.innerHTML = matches.map(u => `<div class="autofill-suggestion-item" onclick="selectReturnUser('${u.name.replace(/'/g, "\\'")}')"><span>${u.name}</span><span class="autofill-id">${u.id}</span></div>`).join('');
+  listEl.style.display = 'block';
+}
+
+function selectReturnUser(name) {
+  document.getElementById('return-search').value = name;
+  document.querySelectorAll('.autofill-suggestions').forEach(e => e.style.display = 'none');
+  searchForReturn(name);
+}
+ 
+document.addEventListener('click', e => { if (!e.target.closest('.form-group')) document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none'); });
+ 
+// ADMIN ACTIONS
+function openAddAsset() { 
+  document.getElementById('modal-asset-title').textContent = "Asset hinzufügen";
+  document.getElementById('asset-id').value = '';
+  document.getElementById('asset-name').value = '';
+  document.getElementById('asset-category').value = '';
+  document.getElementById('asset-serial').value = '';
+  document.getElementById('asset-qty').value = 1;
+  document.getElementById('modal-asset').classList.add('open'); 
+}
+ 
+function openEditAsset(id) {
+  const asset = assets.find(a => a.id === id);
+  if (!asset) return;
+  
+  document.getElementById('modal-asset-title').textContent = "Asset bearbeiten";
+  document.getElementById('asset-id').value = asset.id;
+  document.getElementById('asset-name').value = asset.name;
+  document.getElementById('asset-category').value = asset.category || '';
+  document.getElementById('asset-serial').value = asset.serial || '';
+  document.getElementById('asset-qty').value = asset.qty || 1;
+  
+  document.getElementById('modal-asset').classList.add('open');
+}
+ 
+function openLoanModal() { fillLoanSelect(); document.getElementById('modal-loan').classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+ 
+function fillLoanSelect() {
+  const sel = document.getElementById('loan-asset');
+  const avail = assets.filter(a => loans.filter(l => l.assetId === a.id).length < (parseInt(a.qty) || 1));
+  sel.innerHTML = avail.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+}
+ 
+function saveAsset() {
+  const name = document.getElementById('asset-name').value.trim();
+  if(!name) return;
+  
+  let id = document.getElementById('asset-id').value;
+  if (!id) {
+    id = Date.now().toString();
+    assets.push({
+      id, name,
+      category: document.getElementById('asset-category').value.trim(),
+      serial: document.getElementById('asset-serial').value.trim(),
+      qty: document.getElementById('asset-qty').value
+    });
+  } else {
+    const idx = assets.findIndex(a => a.id === id);
+    if (idx !== -1) {
+      assets[idx] = {
+        id, name,
+        category: document.getElementById('asset-category').value.trim(),
+        serial: document.getElementById('asset-serial').value.trim(),
+        qty: document.getElementById('asset-qty').value
+      };
+    }
+  }
+  
+  saveToStorage(); renderAll(); closeModal('modal-asset');
+}
+ 
+function deleteAsset(id) {
+  if(confirm('Löschen?')) { assets = assets.filter(a => a.id !== id); saveToStorage(); renderAll(); }
+}
+ 
+function saveLoan() {
+  const assetId = document.getElementById('loan-asset').value;
+  const person = document.getElementById('loan-person').value.trim();
+  const userId = document.getElementById('loan-userid').value.trim();
+  if(!person || !assetId) return;
+
+  const userExists = importedUsers.some(u => u.name.toLowerCase() === person.toLowerCase());
+  if (!userExists) { showNotification('Fehler', 'Benutzer nicht in der User-Liste gefunden!', 'error'); return; }
+
+  loans.push({ id: Date.now().toString(), assetId, person, userId, date: document.getElementById('loan-date').value });
+  saveToStorage(); renderAll(); closeModal('modal-loan');
+  showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
+}
+ 
+function returnAsset(loanId) {
+  const loan = loans.find(l => l.id === loanId);
+  if (!loan) return;
+  const asset = assets.find(a => a.id === loan.assetId);
+  history.push({ assetId: loan.assetId, assetName: asset?asset.name:'?', person: loan.person, userId: loan.userId||'', loanDate: loan.date, returnDate: new Date().toISOString().split('T')[0] });
+  loans = loans.filter(l => l.id !== loanId);
+  saveToStorage(); renderAll(); 
+  
+  const currentSearch = document.getElementById('return-search').value;
+  searchForReturn(currentSearch);
+  showNotification('Rückgabe', 'Das Asset wurde erfolgreich als zurückgegeben markiert.', 'info');
+}
+ 
+function exportExcel() {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(assets), 'Assets');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(loans), 'Ausleihen');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(history), 'Historie');
+  XLSX.writeFile(wb, `AssetTrack_Export.xlsx`);
+}
+ 
+function importUsersExcel(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      if (sheet) {
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        importedUsers = [];
+        for (let i = 1; i < rows.length; i++) {
+          // FILED-CLEANUP: Bereinigt Zeilenumbrüche (\n, \r) und doppelte Leerzeichen aus Excel-Zellen
+          let name = rows[i][0] ? String(rows[i][0]).replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+          let userId = rows[i][1] ? String(rows[i][1]).replace(/[\r\n]+/g, '').trim() : '';
+          if (name && userId) importedUsers.push({ name, id: userId });
+        }
+        localStorage.setItem('am_users', JSON.stringify(importedUsers));
+        showNotification('Import erfolgreich', `${importedUsers.length} Benutzer wurden sauber importiert (Zeilenumbrüche wurden automatisch korrigiert).`, 'success');
+      }
+    } catch(err) { showNotification('Fehler', 'Die Excel-Datei konnte nicht verarbeitet werden.', 'error'); }
+  };
+  reader.readAsBinaryString(file);
+}
+ 
+initRole();
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght=400;500&family=Syne:wght=400;600;700;800&display=swap');
+
+:root {
+  --bg:#0f0f0f;
+  --surface:#1a1a1a;
+  --surface2:#242424;
+  --border:#2e2e2e;
+  --accent:#e8ff47;
+  --accent2:#47c8ff;
+  --danger:#ff4747;
+  --text:#f0f0f0;
+  --muted:#666;
+  --green:#47ffb0;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Syne',sans-serif;
+}
+
+header{
+  padding:24px 32px;
+  display:flex;
+  justify-content:space-between;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+}
+
+.tabs{display:flex;background:var(--surface);padding:0 32px;border-bottom:1px solid var(--border)}
+.tab{padding:14px;cursor:pointer;color:var(--muted)}
+.tab.active{color:var(--accent)}
+
+main{padding:32px;max-width:1200px;margin:auto}
+
+.view{display:none}
+.view.active{display:block}
+
+.btn{padding:10px 14px;border-radius:8px;border:none;cursor:pointer}
+.btn-primary{background:var(--accent);color:#000}
+.btn-secondary{background:var(--surface2);color:#fff;border:1px solid var(--border)}
+
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse}
+td,th{padding:12px;border-bottom:1px solid var(--border);font-size:14px}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>AssetTrack</h1>
+  <select id="global-role-select" onchange="handleRoleChange(this.value)">
+    <option value="admin">Admin</option>
+    <option value="user">User</option>
+  </select>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+  <div class="tab" onclick="switchTab('assets')">Assets</div>
+  <div class="tab" onclick="switchTab('loans')">Ausleihen</div>
+  <div class="tab" onclick="switchTab('history')">Historie</div>
+  <div class="tab" onclick="switchTab('quick')">Quick</div>
+</div>
+
+<main>
+
+<!-- DASHBOARD -->
+<div id="view-dashboard" class="view active">
+  <h2>Dashboard</h2>
+  <p id="stats"></p>
+</div>
+
+<!-- ASSETS -->
+<div id="view-assets" class="view">
+  <button class="btn btn-primary" onclick="openAddAsset()">+ Asset</button>
+  <div class="table-wrap">
+    <table>
+      <tbody id="assets-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- LOANS -->
+<div id="view-loans" class="view">
+  <div class="table-wrap">
+    <table>
+      <tbody id="loans-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- HISTORY -->
+<div id="view-history" class="view">
+  <div class="table-wrap">
+    <table>
+      <tbody id="history-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- QUICK -->
+<div id="view-quick" class="view">
+  <h2>Quick</h2>
+</div>
+
+</main>
+
+<script>
+
+/* =========================
+   SUPABASE INIT
+========================= */
+
+const SUPABASE_URL = "https://ugdoqrbiampugaivjisy.supabase.co/rest/v1/";
+const SUPABASE_ANON_KEY = "sb_publishable_CyG4q8nx6k0L46B2NPECfg_p9jJagsK";
+
+const supabase = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+/* =========================
+   STATE
+========================= */
+
+let assets = [];
+let loans = [];
+let history = [];
+let currentRole = "admin";
+
+/* =========================
+   LOAD DATA
+========================= */
+
+async function loadAll() {
+  const [{ data: a }, { data: l }, { data: h }] =
+    await Promise.all([
+      supabase.from("assets").select("*"),
+      supabase.from("loans").select("*"),
+      supabase.from("history").select("*")
+    ]);
+
+  assets = a || [];
+  loans = l || [];
+  history = h || [];
+
+  renderAll();
+}
+
+/* =========================
+   REALTIME
+========================= */
+
+function initRealtime() {
+  supabase.channel("sync")
+    .on("postgres_changes",{event:"*",schema:"public",table:"assets"},loadAll)
+    .on("postgres_changes",{event:"*",schema:"public",table:"loans"},loadAll)
+    .on("postgres_changes",{event:"*",schema:"public",table:"history"},loadAll)
+    .subscribe();
+}
+
+/* =========================
+   UI
+========================= */
+
+function switchTab(tab){
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("view-"+tab).classList.add("active");
+}
+
+/* =========================
+   RENDER
+========================= */
+
+function renderAll(){
+  document.getElementById("assets-table").innerHTML =
+    assets.map(a=>`
+      <tr>
+        <td>${a.name}</td>
+        <td><button onclick="deleteAsset('${a.id}')">X</button></td>
+      </tr>
+    `).join("");
+
+  document.getElementById("loans-table").innerHTML =
+    loans.map(l=>`
+      <tr>
+        <td>${l.person}</td>
+        <td><button onclick="returnAsset('${l.id}')">Return</button></td>
+      </tr>
+    `).join("");
+
+  document.getElementById("history-table").innerHTML =
+    history.map(h=>`
+      <tr>
+        <td>${h.asset_name}</td>
+        <td>${h.person}</td>
+      </tr>
+    `).join("");
+
+  document.getElementById("stats").innerText =
+    `Assets: ${assets.length} | Loans: ${loans.length}`;
+}
+
+/* =========================
+   ASSETS
+========================= */
+
+async function openAddAsset(){
+  const name = prompt("Asset Name?");
+  if(!name) return;
+
+  await supabase.from("assets").insert([{
+    id: Date.now().toString(),
+    name
+  }]);
+
+  loadAll();
+}
+
+async function deleteAsset(id){
+  await supabase.from("assets").delete().eq("id",id);
+  loadAll();
+}
+
+/* =========================
+   LOANS
+========================= */
+
+async function saveLoan(){
+  await supabase.from("loans").insert([{
+    id: Date.now().toString(),
+    person: "Test",
+    asset_id: assets[0]?.id
+  }]);
+
+  loadAll();
+}
+
+async function returnAsset(id){
+  const loan = loans.find(l=>l.id===id);
+
+  await supabase.from("history").insert([{
+    id: Date.now().toString(),
+    asset_name: "Asset",
+    person: loan.person,
+    loan_date: new Date().toISOString()
+  }]);
+
+  await supabase.from("loans").delete().eq("id",id);
+
+  loadAll();
+}
+
+/* =========================
+   INIT
+========================= */
+
+loadAll();
+initRealtime();
+
+</script>
+
+</body>
+</html>
