@@ -304,13 +304,16 @@ function saveToStorage() {
 }
 
 async function loadUsersFromSupabase() {
-  setUserStatus('loading', 'User werden geladen...');
+  setUserStatus('loading', 'Verbindung wird geprüft...');
   try {
-    // 1. Fetch data using corrected explicit gateway headers
-    const res = await fetch(`${SUPABASE_URL}/User_Data?select=*`, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': SUPABASE_KEY // Corrected header mapping
+    const res = await fetch(`${SUPABASE_URL}/User_Data?select=Name&limit=1`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setUserStatus('ok', 'Supabase verbunden');
+  } catch (err) {
+    setUserStatus('error', 'Verbindung fehlgeschlagen');
+    console.error(err);
       }
     });
 
@@ -455,12 +458,6 @@ function quickLoan() {
   const date    = document.getElementById('quick-date').value;
   if (!person || !assetId) { showNotification('Fehler', 'Bitte alle Pflichtfelder ausfüllen!', 'error'); return; }
 
-  const userExists = importedUsers.some(u => u.name.toLowerCase() === person.toLowerCase());
-  if (!userExists) {
-    showNotification('Fehler', 'Benutzer nicht in der User-Liste gefunden! Bitte aus den Vorschlägen auswählen.', 'error');
-    return;
-  }
-
   loans.push({ id: Date.now().toString(), assetId, person, userId, date });
   saveToStorage(); initQuickTab(); renderAll();
   showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
@@ -479,19 +476,30 @@ function searchForReturn(selectedNameOrId) {
 }
 
 // ===== AUTOFILL =====
-function handleUserAutofill(inputEl, type, isModal = false) {
+async function handleUserAutofill(inputEl, type, isModal = false) {
   const prefix = isModal ? 'loan-' : 'quick-';
-  const val    = inputEl.value.trim().toLowerCase();
+  const val    = inputEl.value.trim();
   const listEl = document.getElementById(prefix + (type === 'name' ? 'person' : 'userid') + '-suggestions');
-  if (val.length < 1 || importedUsers.length === 0) { listEl.style.display = 'none'; return; }
-  const matches = importedUsers.filter(u =>
-    u.name.toLowerCase().includes(val) || u.id.toLowerCase().includes(val)
-  ).slice(0, 10);
-  if (matches.length === 0) { listEl.style.display = 'none'; return; }
-  listEl.innerHTML = matches.map(u =>
-    `<div class="autofill-suggestion-item" onclick="selectUserSuggestion('${u.name.replace(/'/g,"\\'")}','${u.id.replace(/'/g,"\\'")}','${prefix}')"><span>${u.name}</span><span class="autofill-id">${u.id}</span></div>`
-  ).join('');
-  listEl.style.display = 'block';
+  if (val.length < 2) { listEl.style.display = 'none'; return; }
+
+  try {
+    const encoded = encodeURIComponent(val);
+    const res = await fetch(
+      `${SUPABASE_URL}/User_Data?select=Name,Axa%20Windows%20ID&or=(Name.ilike.*${encoded}*,Axa%20Windows%20ID.ilike.*${encoded}*)&limit=10`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    );
+    const data = await res.json();
+    if (!data.length) { listEl.style.display = 'none'; return; }
+
+    listEl.innerHTML = data.map(u =>
+      `<div class="autofill-suggestion-item" onclick="selectUserSuggestion('${u.Name.replace(/'/g,"\\'")}','${(u['Axa Windows ID']||'').replace(/'/g,"\\'")}','${prefix}')">
+        <span>${u.Name}</span><span class="autofill-id">${u['Axa Windows ID'] || ''}</span>
+      </div>`
+    ).join('');
+    listEl.style.display = 'block';
+  } catch (err) {
+    console.error('Autofill error:', err);
+  }
 }
 
 function selectUserSuggestion(name, id, prefix) {
@@ -500,18 +508,29 @@ function selectUserSuggestion(name, id, prefix) {
   document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none');
 }
 
-function handleReturnAutofill(inputEl) {
-  const val    = inputEl.value.trim().toLowerCase();
+async function handleReturnAutofill(inputEl) {
+  const val    = inputEl.value.trim();
   const listEl = document.getElementById('return-search-suggestions');
-  if (val.length < 1 || importedUsers.length === 0) { listEl.style.display = 'none'; return; }
-  const matches = importedUsers.filter(u =>
-    u.name.toLowerCase().includes(val) || u.id.toLowerCase().includes(val)
-  ).slice(0, 10);
-  if (matches.length === 0) { listEl.style.display = 'none'; return; }
-  listEl.innerHTML = matches.map(u =>
-    `<div class="autofill-suggestion-item" onclick="selectReturnUser('${u.name.replace(/'/g,"\\'")}')"><span>${u.name}</span><span class="autofill-id">${u.id}</span></div>`
-  ).join('');
-  listEl.style.display = 'block';
+  if (val.length < 2) { listEl.style.display = 'none'; return; }
+
+  try {
+    const encoded = encodeURIComponent(val);
+    const res = await fetch(
+      `${SUPABASE_URL}/User_Data?select=Name,Axa%20Windows%20ID&or=(Name.ilike.*${encoded}*,Axa%20Windows%20ID.ilike.*${encoded}*)&limit=10`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    );
+    const data = await res.json();
+    if (!data.length) { listEl.style.display = 'none'; return; }
+
+    listEl.innerHTML = data.map(u =>
+      `<div class="autofill-suggestion-item" onclick="selectReturnUser('${u.Name.replace(/'/g,"\\'")}')">
+        <span>${u.Name}</span><span class="autofill-id">${u['Axa Windows ID'] || ''}</span>
+      </div>`
+    ).join('');
+    listEl.style.display = 'block';
+  } catch (err) {
+    console.error('Return autofill error:', err);
+  }
 }
 
 function selectReturnUser(name) {
