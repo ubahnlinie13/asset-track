@@ -570,7 +570,7 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.form-group')) document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none');
 });
 
-// ===== AUSLEIHEN & KARTENABFRAGE (FIXED) =====
+// ===== AUSLEIHEN & KARTENABFRAGE =====
 async function saveLoan() {
   const assetId = document.getElementById('loan-asset').value;
   const person  = document.getElementById('loan-person').value.trim();
@@ -583,7 +583,6 @@ async function saveLoan() {
     return;
   }
   
-  // Daten zwischenspeichern und Scanner aufrufen (NICHT direkt senden!)
   pendingLoanData = { loanPayload: { id: Date.now().toString(), assetId, person, userId, date }, isModal: true };
   openScannerModal();
 }
@@ -600,9 +599,9 @@ async function quickLoan() {
     return;
   }
 
-  // Daten zwischenspeichern und Scanner aufrufen (NICHT direkt senden!)
   pendingLoanData = { loanPayload: { id: Date.now().toString(), assetId, person, userId, date }, isModal: false };
   openScannerModal();
+}
 
 // ===== KARTENSCANNER STRUKTUR =====
 function openScannerModal() {
@@ -795,7 +794,6 @@ loadAllDataFromSupabase();
 </script>
 </body>
 </html>
-
 
 
 
