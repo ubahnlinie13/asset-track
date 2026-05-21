@@ -303,19 +303,46 @@ function saveToStorage() {
   localStorage.setItem('am_history', JSON.stringify(history));
 }
 
+<script>
 async function loadUsersFromSupabase() {
   setUserStatus('loading', 'Verbindung wird geprüft...');
+
   try {
-    const res = await fetch(`${SUPABASE_URL}/User_Data?select=Name&limit=1`, {
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    setUserStatus('ok', 'Supabase verbunden');
-  } catch (err) {
-    setUserStatus('error', 'Verbindung fehlgeschlagen');
-    console.error(err);
+    const res = await fetch(
+      `${SUPABASE_URL}/User_Data?select=Name,Axa%20Windows%20ID,Email&limit=500`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
       }
-    });
+    );
+
+    // Better error handling
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP ${res.status}: ${errorText}`);
+    }
+
+    const data = await res.json();
+
+    console.log('Successfully fetched rows from Supabase:', data);
+
+    // Normalize columns
+    importedUsers = data.map(row => ({
+      id: row['Axa Windows ID'] || row['axa_windows_id'] || '',
+      name: row['Name'] || row['name'] || '',
+      email: row['Email'] || row['email'] || ''
+    })).filter(u => u.name);
+
+    setUserStatus('ok', `${importedUsers.length} User geladen`);
+
+  } catch (err) {
+    console.error('Supabase Core Error Details:', err);
+    setUserStatus('error', 'User konnten nicht geladen werden');
+  }
+}
+</script>
 
     // 2. Clear error reporting if the gateway rejects us
     if (!res.ok) {
