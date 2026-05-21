@@ -36,6 +36,20 @@
   header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
   header h1 span { color: var(--accent); }
   .header-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+<div class="header-actions">
+  <div class="user-status">
+    <div class="user-status-dot loading" id="user-status-dot"></div>
+    <span id="user-status-text">Lade Datenbank...</span>
+  </div>
+  
+  <select id="global-role-select" class="select-sm" onchange="handleRoleChange(this.value)">
+    <option value="admin">Rolle: Admin</option>
+    <option value="user">Rolle: User (Eingeschränkt)</option>
+  </select>
+
+  <button class="btn btn-secondary btn-sm admin-only" onclick="exportExcel()">⬇ Excel Export</button>
+</div>
  
   .role-select-wrap {
     display: flex; align-items: center; gap: 8px;
@@ -284,9 +298,8 @@
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="closeModal('modal-notification')">Weiter</button>
   </div>
 </div>
-  
- <script>
-// ===== SUPABASE CONFIG =====
+  <script>
+ // ===== SUPABASE CONFIG =====
 const SUPABASE_URL = 'https://ugdoqrbiampugaivjisy.supabase.co/rest/v1';
 const SUPABASE_KEY = 'sb_publishable_9-G0EAi-CKu64e8t49uZOQ_rhTQ-YGv';
 
@@ -302,48 +315,29 @@ const supabaseHeaders = {
 let assets        = [];
 let loans         = [];
 let history       = [];
-let importedUsers = []; 
-let currentRole   = localStorage.getItem('am_role') || 'admin';
 
-// Lädt ALLE Daten live aus Supabase
+// WICHTIG: Wir starten JETZT IMMER als 'user'. 
+// Kein Speichern des Admin-Status im localStorage mehr, damit ein Refresh die Sperre nicht umgeht!
+let currentRole   = 'user'; 
+
+// Lädt alle Daten live aus Supabase
 async function loadAllDataFromSupabase() {
   setUserStatus('loading', 'Lade Datenbank...');
   try {
-    // 1. Assets laden
+    // Assets und aktive Ausleihen laden (brauchen beide Rollen)
     const resAssets = await fetch(`${SUPABASE_URL}/assets?select=*`, { headers: supabaseHeaders });
     if (resAssets.ok) assets = await resAssets.json();
 
-    // 2. Aktive Ausleihen laden
     const resLoans = await fetch(`${SUPABASE_URL}/loans?select=*`, { headers: supabaseHeaders });
     if (resLoans.ok) loans = await resLoans.json();
 
-    // 3. Historie laden
-    const resHist = await fetch(`${SUPABASE_URL}/history?select=*`, { headers: supabaseHeaders });
-    if (resHist.ok) history = await resHist.json();
+    // Die Historie laden wir NUR, wenn der Nutzer sich bereits erfolgreich als Admin authentifiziert hat
+    if (currentRole === 'admin') {
+      const resHist = await fetch(`${SUPABASE_URL}/history?select=*`, { headers: supabaseHeaders });
+      if (resHist.ok) history = await resHist.json();
+    }
 
-    // Status setzen (unabhängig von einer lokalen User-Liste)
-    setUserStatus('ok', `Daten live synchronisiert`);
-    renderAll();
-
-  } catch (err) {
-    console.error('Fehler beim Laden der Supabase-Daten:', err);
-    setUserStatus('error', 'Datenbank-Verbindung fehlgeschlagen');
-  }
-}
-
-    // 2. Assets laden
-    const resAssets = await fetch(`${SUPABASE_URL}/assets?select=*`, { headers: supabaseHeaders });
-    if (resAssets.ok) assets = await resAssets.json();
-
-    // 3. Aktive Ausleihen laden
-    const resLoans = await fetch(`${SUPABASE_URL}/loans?select=*`, { headers: supabaseHeaders });
-    if (resLoans.ok) loans = await resLoans.json();
-
-    // 4. Historie laden
-    const resHist = await fetch(`${SUPABASE_URL}/history?select=*`, { headers: supabaseHeaders });
-    if (resHist.ok) history = await resHist.json();
-
-    setUserStatus('ok', `Daten live synchronisiert`);
+    setUserStatus('ok', `Daten live synchronisiert (${currentRole.toUpperCase()})`);
     renderAll();
 
   } catch (err) {
@@ -371,24 +365,48 @@ function showNotification(title, message, type = 'success') {
   document.getElementById('modal-notification').classList.add('open');
 }
 
-// ===== ROLLEN =====
-function handleRoleChange(newRole) {
-  currentRole = newRole;
-  localStorage.setItem('am_role', currentRole);
-  initRole();
-}
-
-function initRole() {
-  document.getElementById('global-role-select').value = currentRole;
-  if (currentRole === 'user') {
-    document.body.classList.add('role-user');
-    switchTab('quick');
+// ===== ROLLENWECHSEL MIT PASSWORT =====
+// ===== ROLLENWECHSEL MIT PASSWORT-ZWANG =====
+async function handleRoleChange(newRole) {
+  // Wenn jemand in die Admin-View will (egal ob beim Wechseln oder beim Start)
+  if (newRole === 'admin') {
+    const password = prompt("Admin-Passwort erforderlich:");
+    
+    // Dein Master-Passwort
+    if (password === "1234") { 
+      currentRole = 'admin';
+      
+      // Jetzt erst laden wir die restlichen Admin-Daten (Historie) nach
+      await loadAllDataFromSupabase(); 
+      initRole();
+      showNotification('Erfolg', 'Admin-Bereich freigeschaltet!', 'success');
+    } else {
+      showNotification('Fehler', 'Falsches Passwort! Zugriff verweigert.', 'error');
+      // Dropdown im UI hart auf 'user' zurücksetzen
+      document.getElementById('global-role-select').value = 'user';
+    }
   } else {
-    document.body.classList.remove('role-user');
-    switchTab('dashboard');
+    // Zurück zu User geht immer sofort
+    currentRole = 'user';
+    // Historie aus dem Speicher löschen, damit sie im User-Modus nicht mehr im RAM liegt
+    history = []; 
+    initRole();
   }
 }
 
+function initRole() {
+  const selectEl = document.getElementById('global-role-select');
+  if (selectEl) selectEl.value = currentRole;
+
+  if (currentRole === 'user') {
+    document.body.classList.add('role-user');
+    switchTab('quick'); // Schickt den User direkt zum Schnellzugang
+  } else {
+    document.body.classList.remove('role-user');
+    switchTab('dashboard'); // Schickt den Admin zum Dashboard
+  }
+}
+    
 // ===== TABS =====
 function switchTab(tab) {
   if (currentRole === 'user' && tab !== 'quick') tab = 'quick';
@@ -399,7 +417,7 @@ function switchTab(tab) {
   renderAll();
 }
 
-// ===== RENDER =====
+// ===== RENDER LOGIK =====
 function renderAll() {
   if (currentRole === 'admin') { renderDashboard(); renderAssets(); renderLoans(); renderHistory(); }
   else { fillQuickSelect(); }
@@ -465,13 +483,18 @@ function fillQuickSelect() {
     : avail.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 }
 
-// Ausleihe über Schnellzugriff (Datenbank INSERT)
+// Ausleihe über Schnellzugriff (300k Validierung)
 async function quickLoan() {
   const assetId = document.getElementById('quick-asset').value;
   const person  = document.getElementById('quick-person').value.trim();
   const userId  = document.getElementById('quick-userid').value.trim();
   const date    = document.getElementById('quick-date').value;
   if (!person || !assetId) { showNotification('Fehler', 'Bitte alle Pflichtfelder ausfüllen!', 'error'); return; }
+
+  if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
+    showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
+    return;
+  }
 
   const newLoan = { id: Date.now().toString(), assetId, person, userId, date };
 
@@ -484,6 +507,7 @@ async function quickLoan() {
     if(!res.ok) throw new Error('Fehler beim Speichern der Ausleihe');
     
     loans.push(newLoan);
+    selectedUserForLoan = null;
     initQuickTab(); renderAll();
     showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
   } catch(err) {
@@ -503,23 +527,17 @@ function searchForReturn(selectedNameOrId) {
   }).join('') + `</div>`;
 }
 
-// Ein globaler State, um den aktuell ausgewählten User für die Validierung zu speichern
+// ===== AUTOFILL (300K LIVE QUERY) =====
 let selectedUserForLoan = null;
 
 async function handleUserAutofill(inputEl, type, isModal = false) {
   const prefix = isModal ? 'loan-' : 'quick-';
   const val    = inputEl.value.trim();
   const listEl = document.getElementById(prefix + (type === 'name' ? 'person' : 'userid') + '-suggestions');
-  
-  // WICHTIG BEI 300K USER CORRECTIONS: Erst ab 3 Zeichen suchen, um die DB zu schonen!
-  if (val.length < 3) { 
-    listEl.style.display = 'none'; 
-    return; 
-  }
+  if (val.length < 3) { listEl.style.display = 'none'; return; }
 
   try {
     const encoded = encodeURIComponent(val);
-    // Wir suchen live in Supabase nach Name ODER Windows ID
     const res = await fetch(
       `${SUPABASE_URL}/User_Data?select=Name,Axa%20Windows%20ID&or=(Name.ilike.*${encoded}*,Axa%20Windows%20ID.ilike.*${encoded}*)&limit=10`,
       { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
@@ -528,8 +546,8 @@ async function handleUserAutofill(inputEl, type, isModal = false) {
     if (!data.length) { listEl.style.display = 'none'; return; }
 
     listEl.innerHTML = data.map(u => {
-      const safeName = u.Name.replace(/'/g, "\\'");
-      const safeId = (u['Axa Windows ID'] || '').replace(/'/g, "\\'");
+      const safeName = u.Name.replace(/'/g,"\\'");
+      const safeId = (u['Axa Windows ID']||'').replace(/'/g,"\\'");
       return `<div class="autofill-suggestion-item" onclick="selectUserSuggestion('${safeName}','${safeId}','${prefix}')">
         <span>${u.Name}</span><span class="autofill-id">${u['Axa Windows ID'] || ''}</span>
       </div>`;
@@ -543,17 +561,14 @@ async function handleUserAutofill(inputEl, type, isModal = false) {
 function selectUserSuggestion(name, id, prefix) {
   document.getElementById(prefix + 'person').value = name;
   document.getElementById(prefix + 'userid').value = id;
-  
-  // Wir merken uns, dass ein gültiger User aus der DB gewählt wurde
   selectedUserForLoan = { name, id };
-  
-  document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.style.display = 'none');
+  document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none');
 }
 
 async function handleReturnAutofill(inputEl) {
   const val    = inputEl.value.trim();
   const listEl = document.getElementById('return-search-suggestions');
-  if (val.length < 2) { listEl.style.display = 'none'; return; }
+  if (val.length < 3) { listEl.style.display = 'none'; return; }
 
   try {
     const encoded = encodeURIComponent(val);
@@ -571,7 +586,7 @@ async function handleReturnAutofill(inputEl) {
     ).join('');
     listEl.style.display = 'block';
   } catch (err) {
-    console.error('Return autofill error:', err);
+    console.error(err);
   }
 }
 
@@ -615,75 +630,43 @@ function fillLoanSelect() {
   sel.innerHTML = avail.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 }
 
-// Asset speichern (Datenbank POST oder PATCH)
 async function saveAsset() {
   const name = document.getElementById('asset-name').value.trim();
   if (!name) return;
   let id = document.getElementById('asset-id').value;
   
-  const data = { 
-    id: id || Date.now().toString(), 
-    name, 
-    category: document.getElementById('asset-category').value.trim(), 
-    serial: document.getElementById('asset-serial').value.trim(), 
-    qty: parseInt(document.getElementById('asset-qty').value) || 1 
-  };
+  const data = { id: id || Date.now().toString(), name, category: document.getElementById('asset-category').value.trim(), serial: document.getElementById('asset-serial').value.trim(), qty: parseInt(document.getElementById('asset-qty').value) || 1 };
 
   try {
     if (!id) {
-      // Neues Asset erstellen (POST)
-      const res = await fetch(`${SUPABASE_URL}/assets`, {
-        method: 'POST',
-        headers: supabaseHeaders,
-        body: JSON.stringify(data)
-      });
-      if(!res.ok) throw new Error('Fehler beim Hinzufügen des Assets');
+      const res = await fetch(`${SUPABASE_URL}/assets`, { method: 'POST', headers: supabaseHeaders, body: JSON.stringify(data) });
+      if(!res.ok) throw new Error('Fehler beim Hinzufügen');
       assets.push(data);
     } else {
-      // Bestehendes Asset updaten (PATCH)
-      const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, {
-        method: 'PATCH',
-        headers: supabaseHeaders,
-        body: JSON.stringify(data)
-      });
-      if(!res.ok) throw new Error('Fehler beim Updaten des Assets');
-      const idx = assets.findIndex(a => a.id === id);
-      if (idx !== -1) assets[idx] = data;
+      const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, { method: 'PATCH', headers: supabaseHeaders, body: JSON.stringify(data) });
+      if(!res.ok) throw new Error('Fehler beim Updaten');
+      const idx = assets.findIndex(a => a.id === id); if (idx !== -1) assets[idx] = data;
     }
-
     renderAll(); closeModal('modal-asset');
-  } catch(err) {
-    alert(err.message);
-  }
+  } catch(err) { alert(err.message); }
 }
 
-// Asset löschen (Datenbank DELETE)
 async function deleteAsset(id) {
-  if (confirm('Möchtest du dieses Asset wirklich unwiderruflich löschen?')) {
+  if (confirm('Möchtest du dieses Asset wirklich löschen?')) {
     try {
-      const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, {
-        method: 'DELETE',
-        headers: supabaseHeaders
-      });
-      if(!res.ok) throw new Error('Asset konnte nicht gelöscht werden. Evtl. ist es noch ausgeliehen.');
-      
-      assets = assets.filter(a => a.id !== id);
-      renderAll();
-    } catch(err) {
-      alert(err.message);
-    }
+      const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, { method: 'DELETE', headers: supabaseHeaders });
+      if(!res.ok) throw new Error('Asset konnte nicht gelöscht werden.');
+      assets = assets.filter(a => a.id !== id); renderAll();
+    } catch(err) { alert(err.message); }
   }
 }
 
-// Ausleihe über Modal (Datenbank INSERT)
 async function saveLoan() {
   const assetId = document.getElementById('loan-asset').value;
   const person  = document.getElementById('loan-person').value.trim();
   const userId  = document.getElementById('loan-userid').value.trim();
   if (!person || !assetId) return;
 
-  // Validierung für die 300k User:
-  // Wir prüfen, ob der User über die Autofill-Liste ausgewählt wurde
   if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
     showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
     return;
@@ -692,65 +675,34 @@ async function saveLoan() {
   const newLoan = { id: Date.now().toString(), assetId, person, userId, date: document.getElementById('loan-date').value };
 
   try {
-    const res = await fetch(`${SUPABASE_URL}/loans`, {
-      method: 'POST',
-      headers: supabaseHeaders,
-      body: JSON.stringify(newLoan)
-    });
-    if(!res.ok) throw new Error('Fehler beim Speichern der Ausleihe');
-
+    const res = await fetch(`${SUPABASE_URL}/loans`, { method: 'POST', headers: supabaseHeaders, body: JSON.stringify(newLoan) });
+    if(!res.ok) throw new Error('Fehler beim Speichern');
     loans.push(newLoan);
-    
-    // Nach erfolgreichem Speichern den temporären User zurücksetzen
     selectedUserForLoan = null;
-    
     renderAll(); closeModal('modal-loan');
     showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
-  } catch(err) {
-    alert(err.message);
-  }
+  } catch(err) { alert(err.message); }
 }
 
-// Rückgabe erfassen (Datenbank DELETE aus loans + INSERT in history)
 async function returnAsset(loanId) {
   const loan  = loans.find(l => l.id === loanId);
   if (!loan) return;
   const asset = assets.find(a => a.id === loan.assetId);
   
-  const historyData = { 
-    assetId: loan.assetId, 
-    assetName: asset ? asset.name : '?', 
-    person: loan.person, 
-    userId: loan.userId || '', 
-    loanDate: loan.date, 
-    returnDate: new Date().toISOString().split('T')[0] 
-  };
+  const historyData = { assetId: loan.assetId, assetName: asset ? asset.name : '?', person: loan.person, userId: loan.userId || '', loanDate: loan.date, returnDate: new Date().toISOString().split('T')[0] };
 
   try {
-    // 1. Ausleihe löschen
-    const resDel = await fetch(`${SUPABASE_URL}/loans?id=eq.${loanId}`, {
-      method: 'DELETE',
-      headers: supabaseHeaders
-    });
-    if(!resDel.ok) throw new Error('Rückgabe fehlgeschlagen (Fehler beim Entfernen der Ausleihe)');
+    const resDel = await fetch(`${SUPABASE_URL}/loans?id=eq.${loanId}`, { method: 'DELETE', headers: supabaseHeaders });
+    if(!resDel.ok) throw new Error('Fehler beim Entfernen der Ausleihe');
 
-    // 2. In Historie eintragen
-    await fetch(`${SUPABASE_URL}/history`, {
-      method: 'POST',
-      headers: supabaseHeaders,
-      body: JSON.stringify(historyData)
-    });
+    await fetch(`${SUPABASE_URL}/history`, { method: 'POST', headers: supabaseHeaders, body: JSON.stringify(historyData) });
 
-    // Lokalen State synchronisieren
     loans = loans.filter(l => l.id !== loanId);
     history.push(historyData);
-
     renderAll();
     searchForReturn(document.getElementById('return-search').value);
     showNotification('Rückgabe', 'Asset erfolgreich zurückgegeben.', 'info');
-  } catch(err) {
-    alert(err.message);
-  }
+  } catch(err) { alert(err.message); }
 }
 
 function exportExcel() {
@@ -762,8 +714,8 @@ function exportExcel() {
 }
 
 // ===== INIT =====
-loadAllDataFromSupabase(); // Startet jetzt den Live-Sync für alles!
 initRole();
+loadAllDataFromSupabase();
 </script>
 </body>
 </html>
