@@ -1,14 +1,14 @@
-cat > /mnt/user-data/outputs/AssetTrack_fixed.html << 'ENDOFFILE'
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AssetTrack</title>
+<title>Asset Management (Lokal)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
-
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght=400;500&family=Syne:wght=400;600;700;800&display=swap');
+ 
   :root {
     --bg: #0f0f0f;
     --surface: #1a1a1a;
@@ -20,182 +20,157 @@ cat > /mnt/user-data/outputs/AssetTrack_fixed.html << 'ENDOFFILE'
     --text: #f0f0f0;
     --muted: #666;
     --green: #47ffb0;
-    --blue: #47c8ff; /* FIX: alias damit JS var(--blue) korrekt auflöst */
   }
-
+ 
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; }
-
-  /* ===== HEADER ===== */
+ 
   header {
     padding: 24px 32px;
     border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     background: var(--surface);
   }
   header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
   header h1 span { color: var(--accent); }
   .header-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 
+<div class="header-actions">
+  <div class="user-status">
+    <div class="user-status-dot loading" id="user-status-dot"></div>
+    <span id="user-status-text">Lade Datenbank...</span>
+  </div>
+  
+  <select id="global-role-select" class="select-sm" onchange="handleRoleChange(this.value)">
+    <option value="admin">Rolle: Admin</option>
+    <option value="user">Rolle: User (Eingeschränkt)</option>
+  </select>
+
+  <button class="btn btn-secondary btn-sm admin-only" onclick="exportExcel()">⬇ Excel Export</button>
+</div>
+ 
   .role-select-wrap {
     display: flex; align-items: center; gap: 8px;
     background: var(--surface2); padding: 4px 12px;
     border-radius: 8px; border: 1px solid var(--border);
   }
   .role-select-wrap label { margin-bottom: 0; font-size: 11px; }
-  .role-select {
-    background: transparent; border: none; color: var(--accent);
-    font-weight: 700; font-family: 'Syne', sans-serif;
-    cursor: pointer; padding: 4px 0; width: auto;
+  .role-select { background: transparent; border: none; color: var(--accent); font-weight: 700; font-family: 'Syne', sans-serif; cursor: pointer; padding: 4px 0; width: auto; }
+
+  /* User-Status Anzeige */
+  .user-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-family: 'DM Mono', monospace;
+    color: var(--muted);
   }
-
-  .user-status { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: 'DM Mono', monospace; color: var(--muted); }
-  .user-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
-  .user-status-dot.ok      { background: var(--green); }
+  .user-status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  .user-status-dot.ok { background: var(--green); }
   .user-status-dot.loading { background: var(--accent); animation: pulse 1s infinite; }
-  .user-status-dot.error   { background: var(--danger); }
+  .user-status-dot.error { background: var(--danger); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-  /* ===== TABS ===== */
+ 
   .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 32px; }
   .tab { padding: 14px 22px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; transition: all 0.15s; letter-spacing: 0.5px; text-transform: uppercase; }
   .tab:hover { color: var(--text); }
   .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
   body.role-user .admin-only { display: none !important; }
-
-  /* ===== LAYOUT ===== */
+ 
   main { padding: 32px; max-width: 1200px; margin: 0 auto; }
   .view { display: none; }
   .view.active { display: block; }
-
-  /* ===== STATS ===== */
+ 
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
   .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
   .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; font-family: 'DM Mono', monospace; }
   .stat-value { font-size: 36px; font-weight: 800; line-height: 1; }
   .stat-value.accent { color: var(--accent); }
-  .stat-value.blue   { color: var(--accent2); }
-  .stat-value.green  { color: var(--green); }
-  .stat-value.red    { color: var(--danger); }
-
-  /* ===== SECTION ===== */
+  .stat-value.blue { color: var(--accent2); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--danger); }
+ 
   .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
   .section-title { font-size: 16px; font-weight: 700; }
-
-  /* ===== BUTTONS ===== */
+ 
   .btn { padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 13px; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
-  .btn-primary   { background: var(--accent); color: #000; }
-  .btn-primary:hover  { background: #d4e830; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #d4e830; }
   .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-danger    { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
   .btn-danger:hover { background: var(--danger); color: #fff; }
-  .btn-blue  { background: var(--accent2); color: #000; }
+  .btn-blue { background: var(--accent2); color: #000; }
   .btn-green { background: var(--green); color: #000; }
-  .btn-sm    { padding: 6px 12px; font-size: 12px; }
-
-  /* ===== TABLE ===== */
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+ 
   .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   table { width: 100%; border-collapse: collapse; }
   thead { background: var(--surface2); }
   th { padding: 12px 16px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-family: 'DM Mono', monospace; font-weight: 500; }
   td { padding: 14px 16px; font-size: 14px; border-top: 1px solid var(--border); }
   tr:hover td { background: var(--surface2); }
-
-  /* ===== BADGES ===== */
+ 
   .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: 'DM Mono', monospace; }
   .badge-available { background: rgba(71,255,176,0.15); color: var(--green); }
-  .badge-loaned    { background: rgba(255,71,71,0.15);  color: var(--danger); }
-  .badge-card      { background: rgba(232,255,71,0.1);  color: var(--accent); letter-spacing: 1px; }
-
-  /* ===== MODALS ===== */
+  .badge-loaned { background: rgba(255,71,71,0.15); color: var(--danger); }
+ 
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
   .modal-overlay.open { display: flex; }
   .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; width: 460px; max-width: 95vw; }
   .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
   .modal-notify { text-align: center; width: 400px; padding: 32px 24px; }
   .modal-notify h3 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
-  .modal-notify p  { font-size: 14px; color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+  .modal-notify p { font-size: 14px; color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
   .notify-icon { font-size: 48px; margin-bottom: 16px; display: block; }
   .notify-success .notify-icon { color: var(--green); }
-  .notify-error   .notify-icon { color: var(--danger); }
-  .notify-info    .notify-icon { color: var(--accent2); }
+  .notify-error .notify-icon { color: var(--danger); }
+  .notify-info .notify-icon { color: var(--accent2); }
 
-  /* ===== FORMS ===== */
   .form-group { margin-bottom: 16px; position: relative; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; font-family: 'DM Mono', monospace; }
   .optional { color: #444; font-size: 10px; margin-left: 4px; text-transform: none; }
   input, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px; outline: none; }
   input:focus, select:focus { border-color: var(--accent); }
+ 
   .form-row { display: flex; gap: 12px; }
   .form-row .form-group { flex: 1; }
   .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
-
-  /* ===== SEARCH ===== */
+ 
   .search-bar { position: relative; margin-bottom: 16px; }
   .search-bar input { padding-left: 36px; }
   .search-bar::before { content: '⌕'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; }
-
-  /* ===== MISC ===== */
+ 
   .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
   .empty-icon { font-size: 40px; margin-bottom: 12px; }
   .mono { font-family: 'DM Mono', monospace; font-size: 13px; }
   .actions-cell { display: flex; gap: 6px; }
-
-  /* ===== QUICK ACCESS ===== */
+ 
   .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
   @media (max-width: 768px) { .quick-grid { grid-template-columns: 1fr; } }
   .quick-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; }
   .quick-panel h2 { font-size: 16px; font-weight: 700; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
   .quick-panel h2 .pill { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-family: 'DM Mono', monospace; font-weight: 500; }
   .pill-leihen { background: rgba(232,255,71,0.15); color: var(--accent); }
-  .pill-return  { background: rgba(71,200,255,0.15); color: var(--accent2); }
-
+  .pill-return { background: rgba(71,200,255,0.15); color: var(--accent2); }
+ 
   .return-results { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
   .return-item { display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; font-size: 14px; }
   .return-item-name { font-weight: 600; }
   .return-item-date { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); margin-top: 2px; }
-
+ 
   .autofill-suggestions { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface2); border: 1px solid var(--border); border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 99; box-shadow: 0 8px 16px rgba(0,0,0,0.5); display: none; }
   .autofill-suggestion-item { padding: 10px 14px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
   .autofill-suggestion-item:hover { background: var(--border); color: var(--accent); }
   .autofill-id { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 11px; }
-
-  /* ===== KARTEN-SCANNER MODAL ===== */
-  #modal-scanner {
-    position: fixed; inset: 0;
-    background: rgba(15,15,15,0.95); backdrop-filter: blur(10px);
-    display: none; align-items: center; justify-content: center; z-index: 1000;
-  }
-  #modal-scanner.open { display: flex; }
-  .scanner-body { width: 400px; text-align: center; padding: 40px 32px; background: var(--surface); border: 2px solid var(--border); border-radius: 20px; }
-  .scanner-icon { font-size: 56px; margin-bottom: 16px; transition: all 0.3s; display: block; }
-  .scanner-ring {
-    width: 100px; height: 100px; border-radius: 50%;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 1s linear infinite;
-    margin: 0 auto 20px;
-    display: none;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ===== KARTEN-ANLEGEN MODAL ===== */
-  .scan-area {
-    background: var(--surface2); border: 2px dashed var(--border);
-    border-radius: 12px; padding: 24px; text-align: center;
-    cursor: pointer; transition: all 0.2s; margin-bottom: 16px;
-  }
-  .scan-area:hover, .scan-area.active { border-color: var(--accent); }
-  .scan-area .scan-icon { font-size: 32px; margin-bottom: 8px; }
-  .scan-area p { font-size: 13px; color: var(--muted); }
-  .scan-area .scan-result { font-family: 'DM Mono', monospace; font-size: 16px; color: var(--accent); font-weight: 700; margin-top: 8px; letter-spacing: 2px; }
-  .scan-status { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--muted); margin-top: 6px; }
 </style>
 </head>
 <body>
-
-<!-- ===== HEADER ===== -->
+ 
 <header>
   <h1>Asset<span>Track</span></h1>
   <div class="header-actions">
@@ -210,24 +185,19 @@ cat > /mnt/user-data/outputs/AssetTrack_fixed.html << 'ENDOFFILE'
         <option value="user">User</option>
       </select>
     </div>
-    <button class="btn btn-secondary btn-sm admin-only" onclick="exportExcel()">⬇ Excel Export</button>
+    <button class="btn btn-secondary admin-only" onclick="exportExcel()">⬇ Excel Export</button>
   </div>
 </header>
-
-<!-- ===== TABS ===== -->
+ 
 <div class="tabs">
   <div class="tab admin-only" id="tab-dashboard" onclick="switchTab('dashboard')">Dashboard</div>
-  <div class="tab admin-only" id="tab-assets"    onclick="switchTab('assets')">Assets</div>
-  <div class="tab admin-only" id="tab-loans"     onclick="switchTab('loans')">Ausleihen</div>
-  <div class="tab admin-only" id="tab-history"   onclick="switchTab('history')">Historie</div>
-  <div class="tab admin-only" id="tab-cards"     onclick="switchTab('cards')">🪪 Karten</div>
-  <div class="tab"            id="tab-quick"     onclick="switchTab('quick')">Schnellzugang</div>
+  <div class="tab admin-only" id="tab-assets" onclick="switchTab('assets')">Assets</div>
+  <div class="tab admin-only" id="tab-loans" onclick="switchTab('loans')">Ausleihen</div>
+  <div class="tab admin-only" id="tab-history" onclick="switchTab('history')">Historie</div>
+  <div class="tab" id="tab-quick" onclick="switchTab('quick')">Schnellzugang</div>
 </div>
-
-<!-- ===== MAIN VIEWS ===== -->
+ 
 <main>
-
-  <!-- DASHBOARD -->
   <div class="view admin-only" id="view-dashboard">
     <div class="stats">
       <div class="stat-card"><div class="stat-label">Assets gesamt</div><div class="stat-value accent" id="stat-total">0</div></div>
@@ -236,61 +206,25 @@ cat > /mnt/user-data/outputs/AssetTrack_fixed.html << 'ENDOFFILE'
       <div class="stat-card"><div class="stat-label">Ausleihen gesamt</div><div class="stat-value blue" id="stat-loans">0</div></div>
     </div>
     <div class="section-header"><div class="section-title">Aktuell ausgeliehen</div></div>
-    <div class="table-wrap">
-      <table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Seit</th><th>Aktion</th></tr></thead>
-      <tbody id="active-loans-table"></tbody></table>
-    </div>
+    <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Seit</th><th>Aktion</th></tr></thead><tbody id="active-loans-table"></tbody></table></div>
   </div>
-
-  <!-- ASSETS -->
+ 
   <div class="view admin-only" id="view-assets">
-    <div class="section-header">
-      <div class="section-title">Assets verwalten</div>
-      <button class="btn btn-primary" onclick="openAddAsset()">+ Asset hinzufügen</button>
-    </div>
+    <div class="section-header"><div class="section-title">Assets verwalten</div><button class="btn btn-primary" onclick="openAddAsset()">+ Asset hinzufügen</button></div>
     <div class="search-bar"><input type="text" id="asset-search" placeholder="Assets durchsuchen..." oninput="renderAssets()"></div>
-    <div class="table-wrap">
-      <table><thead><tr><th>Name</th><th>Kategorie</th><th>Seriennummer</th><th>Status</th><th>Aktionen</th></tr></thead>
-      <tbody id="assets-table"></tbody></table>
-    </div>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Kategorie</th><th>Seriennummer</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="assets-table"></tbody></table></div>
   </div>
-
-  <!-- AUSLEIHEN -->
+ 
   <div class="view admin-only" id="view-loans">
-    <div class="section-header">
-      <div class="section-title">Alle aktiven Ausleihen</div>
-      <button class="btn btn-primary" onclick="openLoanModal()">+ Ausleihe erfassen</button>
-    </div>
-    <div class="table-wrap">
-      <table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Ausgeliehen am</th><th>Aktion</th></tr></thead>
-      <tbody id="loans-table"></tbody></table>
-    </div>
+    <div class="section-header"><div class="section-title">Alle aktiven Ausleihen</div><button class="btn btn-primary" onclick="openLoanModal()">+ Ausleihe erfassen</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Ausgeliehen am</th><th>Aktion</th></tr></thead><tbody id="loans-table"></tbody></table></div>
   </div>
-
-  <!-- HISTORIE -->
+ 
   <div class="view admin-only" id="view-history">
     <div class="section-header"><div class="section-title">Ausleih-Historie</div></div>
-    <div class="table-wrap">
-      <table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Ausgeliehen</th><th>Zurückgegeben</th></tr></thead>
-      <tbody id="history-table"></tbody></table>
-    </div>
+    <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Person</th><th>User ID</th><th>Ausgeliehen</th><th>Zurückgegeben</th></tr></thead><tbody id="history-table"></tbody></table></div>
   </div>
-
-  <!-- KARTEN-VERWALTUNG -->
-  <div class="view admin-only" id="view-cards">
-    <div class="section-header">
-      <div class="section-title">Berechtigte Karten</div>
-      <button class="btn btn-primary" onclick="openAddCardModal()">+ Karte anlegen</button>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Karteninhaber</th><th>Hex-Code</th><th>Angelegt am</th><th>Aktion</th></tr></thead>
-        <tbody id="cards-table"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- SCHNELLZUGANG -->
+ 
   <div class="view" id="view-quick">
     <div class="quick-grid">
       <div class="quick-panel">
@@ -298,18 +232,18 @@ cat > /mnt/user-data/outputs/AssetTrack_fixed.html << 'ENDOFFILE'
         <div class="form-group"><label>Asset *</label><select id="quick-asset"></select></div>
         <div class="form-group">
           <label>Name *</label>
-          <input type="text" id="quick-person" placeholder="Max Mustermann" oninput="handleUserAutofill(this,'name')" autocomplete="off">
+          <input type="text" id="quick-person" placeholder="Max Mustermann" oninput="handleUserAutofill(this, 'name')" autocomplete="off">
           <div id="quick-person-suggestions" class="autofill-suggestions"></div>
         </div>
         <div class="form-group">
           <label>User ID <span class="optional">(optional)</span></label>
-          <input type="text" id="quick-userid" placeholder="X123456" oninput="handleUserAutofill(this,'id')" autocomplete="off">
+          <input type="text" id="quick-userid" placeholder="X123456" oninput="handleUserAutofill(this, 'id')" autocomplete="off">
           <div id="quick-userid-suggestions" class="autofill-suggestions"></div>
         </div>
         <div class="form-group"><label>Datum</label><input type="date" id="quick-date"></div>
         <button class="btn btn-primary" style="width:100%" onclick="quickLoan()">Ausleihe erfassen</button>
       </div>
-
+ 
       <div class="quick-panel">
         <h2>Rückgabe <span class="pill pill-return">SCAN</span></h2>
         <div class="form-group">
@@ -321,12 +255,8 @@ cat > /mnt/user-data/outputs/AssetTrack_fixed.html << 'ENDOFFILE'
       </div>
     </div>
   </div>
-
 </main>
-
-<!-- ===== MODALS ===== -->
-
-<!-- Asset Modal -->
+ 
 <div class="modal-overlay" id="modal-asset">
   <div class="modal">
     <h2 id="modal-asset-title">Asset hinzufügen</h2>
@@ -337,85 +267,43 @@ cat > /mnt/user-data/outputs/AssetTrack_fixed.html << 'ENDOFFILE'
       <div class="form-group"><label>Seriennummer</label><input type="text" id="asset-serial" placeholder="SN-123"></div>
     </div>
     <div class="form-group"><label>Anzahl</label><input type="number" id="asset-qty" value="1" min="1"></div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-asset')">Abbrechen</button>
-      <button class="btn btn-primary" onclick="saveAsset()">Speichern</button>
-    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-asset')">Abbrechen</button><button class="btn btn-primary" onclick="saveAsset()">Speichern</button></div>
   </div>
 </div>
-
-<!-- Ausleihe Modal -->
+ 
 <div class="modal-overlay" id="modal-loan">
   <div class="modal">
     <h2>Ausleihe erfassen</h2>
     <div class="form-group"><label>Asset *</label><select id="loan-asset"></select></div>
     <div class="form-group">
       <label>Name der Person *</label>
-      <input type="text" id="loan-person" placeholder="Name" oninput="handleUserAutofill(this,'name',true)" autocomplete="off">
+      <input type="text" id="loan-person" placeholder="Name" oninput="handleUserAutofill(this, 'name', true)" autocomplete="off">
       <div id="loan-person-suggestions" class="autofill-suggestions"></div>
     </div>
     <div class="form-group">
       <label>User ID</label>
-      <input type="text" id="loan-userid" placeholder="ID" oninput="handleUserAutofill(this,'id',true)" autocomplete="off">
+      <input type="text" id="loan-userid" placeholder="ID" oninput="handleUserAutofill(this, 'id', true)" autocomplete="off">
       <div id="loan-userid-suggestions" class="autofill-suggestions"></div>
     </div>
     <div class="form-group"><label>Datum</label><input type="date" id="loan-date"></div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-loan')">Abbrechen</button>
-      <button class="btn btn-primary" onclick="saveLoan()">Ausleihe erfassen</button>
-    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-loan')">Abbrechen</button><button class="btn btn-primary" onclick="saveLoan()">Ausleihe erfassen</button></div>
   </div>
 </div>
 
-<!-- Karte anlegen Modal -->
-<div class="modal-overlay" id="modal-add-card">
-  <div class="modal">
-    <h2>Neue Karte anlegen</h2>
-
-    <!-- Scan-Bereich -->
-    <div class="form-group">
-      <label>Karten-Hex-Code <span class="optional">(via Scanner oder manuell)</span></label>
-      <div class="scan-area" id="scan-area" onclick="activateCardScan()">
-        <div class="scan-icon">📡</div>
-        <p>Hier klicken, dann Karte scannen</p>
-        <div class="scan-result" id="scan-area-result" style="display:none"></div>
-      </div>
-      <input type="text"
-             id="card-hex"
-             placeholder="z.B. A1B2C3D4 — oder oben scannen"
-             oninput="syncHexFromInput(this.value)"
-             autocomplete="off"
-             style="font-family:'DM Mono',monospace; letter-spacing:2px;">
-      <div class="scan-status" id="scan-status"></div>
-    </div>
-
-    <div class="form-group">
-      <label>Name des Karteninhabers *</label>
-      <input type="text" id="card-owner" placeholder="z.B. Max Mustermann">
-    </div>
-
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAddCardModal()">Abbrechen</button>
-      <button class="btn btn-primary" onclick="saveCard()">Karte speichern</button>
-    </div>
-  </div>
-</div>
-
-<!-- Karten-Scanner Modal (für Ausleihe-Bestätigung) -->
-<div id="modal-scanner">
-  <div class="scanner-body">
-    <span class="scanner-icon" id="scanner-icon">💳</span>
+  <div id="modal-scanner" class="modal-overlay" style="position:fixed; inset:0; background:rgba(15,15,15,0.95); backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; z-index:1000; display:none;">
+  <div class="modal" style="width:400px; text-align:center; padding:32px; border:2px solid var(--border);">
+    <div id="scanner-icon" style="font-size:48px; margin-bottom:16px; transition: all 0.3s;">💳</div>
     <h3 id="scanner-title" style="margin-bottom:8px;">Mitarbeiter-Karte benötigt</h3>
-    <p id="scanner-message" style="color:var(--muted);font-size:14px;margin-bottom:24px;line-height:1.5">
-      Bitte die Autorisierungs-Karte an den Scanner halten...
-    </p>
-    <input type="text" id="scanner-hidden-input" autocomplete="off"
-           style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;">
-    <button class="btn btn-secondary" onclick="cancelScanner()">Abbrechen</button>
+    <p id="scanner-message" style="color:var(--muted); font-size:14px; margin-bottom:24px;">Bitte die Autorisierungs-Karte an den Scanner halten...</p>
+    
+    <input type="text" id="scanner-hidden-input" autocomplete="off" style="position:absolute; opacity:0; pointer-events:none;">
+    
+    <div style="display:flex; gap:12px; justify-content:center;">
+      <button class="btn btn-secondary" onclick="cancelScanner()">Abbrechen</button>
+    </div>
   </div>
 </div>
 
-<!-- Benachrichtigung Modal -->
 <div class="modal-overlay" id="modal-notification">
   <div class="modal modal-notify" id="notify-wrapper">
     <span class="notify-icon" id="notify-icon">✓</span>
@@ -425,140 +313,130 @@ cat > /mnt/user-data/outputs/AssetTrack_fixed.html << 'ENDOFFILE'
   </div>
 </div>
 
-<!-- ===== JAVASCRIPT ===== -->
-<script>
-// ===== SUPABASE CONFIG =====
-// WICHTIG: Ersetze diesen Key mit deinem echten Supabase Anon-Key (beginnt mit "eyJ...")
+  
+  <script>
+ // ===== SUPABASE CONFIG =====
 const SUPABASE_URL = 'https://ugdoqrbiampugaivjisy.supabase.co/rest/v1';
-const SUPABASE_KEY = 'DEIN_SUPABASE_ANON_KEY_HIER'; // eyJ...
+const SUPABASE_KEY = 'sb_publishable_9-G0EAi-CKu64e8t49uZOQ_rhTQ-YGv';
 
+// ===== HEADERS HELPERS =====
 const supabaseHeaders = {
-  'apikey':        SUPABASE_KEY,
+  'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
-  'Content-Type':  'application/json',
-  'Prefer':        'return=representation'
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation'
 };
 
 // ===== STATE =====
-let assets  = [];
-let loans   = [];
-let history = [];
-let cards   = [];  // auth_cards
+let assets        = [];
+let loans         = [];
+let history       = [];
 
-let currentRole        = 'user';
-let pendingLoanData    = null;
-let selectedUserForLoan = null;
+// WICHTIG: Wir starten JETZT IMMER als 'user'. 
+// Kein Speichern des Admin-Status im localStorage mehr, damit ein Refresh die Sperre nicht umgeht!
+let currentRole   = 'user'; 
 
-// ===== INIT =====
-initRole();
-loadAllDataFromSupabase();
-
-// ===== DATA LOADING =====
+// Lädt alle Daten live aus Supabase
 async function loadAllDataFromSupabase() {
   setUserStatus('loading', 'Lade Datenbank...');
   try {
-    const [resAssets, resLoans] = await Promise.all([
-      fetch(`${SUPABASE_URL}/assets?select=*`, { headers: supabaseHeaders }),
-      fetch(`${SUPABASE_URL}/loans?select=*`,  { headers: supabaseHeaders })
-    ]);
+    // Assets und aktive Ausleihen laden (brauchen beide Rollen)
+    const resAssets = await fetch(`${SUPABASE_URL}/assets?select=*`, { headers: supabaseHeaders });
     if (resAssets.ok) assets = await resAssets.json();
-    if (resLoans.ok)  loans  = await resLoans.json();
 
+    const resLoans = await fetch(`${SUPABASE_URL}/loans?select=*`, { headers: supabaseHeaders });
+    if (resLoans.ok) loans = await resLoans.json();
+
+    // Die Historie laden wir NUR, wenn der Nutzer sich bereits erfolgreich als Admin authentifiziert hat
     if (currentRole === 'admin') {
-      await loadAdminData();
+      const resHist = await fetch(`${SUPABASE_URL}/history?select=*`, { headers: supabaseHeaders });
+      if (resHist.ok) history = await resHist.json();
     }
 
-    setUserStatus('ok', `Synchronisiert (${currentRole.toUpperCase()})`);
+    setUserStatus('ok', `Daten live synchronisiert (${currentRole.toUpperCase()})`);
     renderAll();
-  } catch (err) {
-    console.error(err);
-    setUserStatus('error', 'Datenbankverbindung fehlgeschlagen');
-  }
-}
 
-async function loadAdminData() {
-  const [resHist, resCards] = await Promise.all([
-    fetch(`${SUPABASE_URL}/history?select=*`,    { headers: supabaseHeaders }),
-    fetch(`${SUPABASE_URL}/auth_cards?select=*`, { headers: supabaseHeaders })
-  ]);
-  if (resHist.ok)  history = await resHist.json();
-  if (resCards.ok) cards   = await resCards.json();
+  } catch (err) {
+    console.error('Fehler beim Laden der Supabase-Daten:', err);
+    setUserStatus('error', 'Datenbank-Verbindung fehlgeschlagen');
+  }
 }
 
 function setUserStatus(status, text) {
   const dot = document.getElementById('user-status-dot');
   const txt = document.getElementById('user-status-text');
-  if (!dot || !txt) return;
-  dot.className   = 'user-status-dot ' + status;
+  if(!dot || !txt) return;
+  dot.className = 'user-status-dot ' + status;
   txt.textContent = text;
 }
 
-// ===== NOTIFICATIONS =====
+// ===== NOTIFICATION =====
 function showNotification(title, message, type = 'success') {
   const wrapper = document.getElementById('notify-wrapper');
   const iconEl  = document.getElementById('notify-icon');
-  wrapper.className = 'modal modal-notify notify-' + type;
+  wrapper.className      = 'modal modal-notify notify-' + type;
   document.getElementById('notify-title').textContent   = title;
   document.getElementById('notify-message').textContent = message;
   iconEl.textContent = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
   document.getElementById('modal-notification').classList.add('open');
 }
 
-// ===== ROLLE =====
+// ===== ROLLENWECHSEL MIT PASSWORT =====
+// ===== ROLLENWECHSEL MIT PASSWORT-ZWANG =====
 async function handleRoleChange(newRole) {
+  // Wenn jemand in die Admin-View will (egal ob beim Wechseln oder beim Start)
   if (newRole === 'admin') {
-    const password = prompt('Admin-Passwort erforderlich:');
-    if (password === '1234') {
+    const password = prompt("Admin-Passwort erforderlich:");
+    
+    // Dein Master-Passwort
+    if (password === "1234") { 
       currentRole = 'admin';
-      await loadAllDataFromSupabase();
+      
+      // Jetzt erst laden wir die restlichen Admin-Daten (Historie) nach
+      await loadAllDataFromSupabase(); 
       initRole();
       showNotification('Erfolg', 'Admin-Bereich freigeschaltet!', 'success');
     } else {
       showNotification('Fehler', 'Falsches Passwort! Zugriff verweigert.', 'error');
+      // Dropdown im UI hart auf 'user' zurücksetzen
       document.getElementById('global-role-select').value = 'user';
     }
   } else {
+    // Zurück zu User geht immer sofort
     currentRole = 'user';
-    history = [];
-    cards   = [];
+    // Historie aus dem Speicher löschen, damit sie im User-Modus nicht mehr im RAM liegt
+    history = []; 
     initRole();
   }
 }
 
 function initRole() {
-  const sel = document.getElementById('global-role-select');
-  if (sel) sel.value = currentRole;
+  const selectEl = document.getElementById('global-role-select');
+  if (selectEl) selectEl.value = currentRole;
+
   if (currentRole === 'user') {
     document.body.classList.add('role-user');
-    switchTab('quick');
+    switchTab('quick'); // Schickt den User direkt zum Schnellzugang
   } else {
     document.body.classList.remove('role-user');
-    switchTab('dashboard');
+    switchTab('dashboard'); // Schickt den Admin zum Dashboard
   }
 }
-
+    
 // ===== TABS =====
 function switchTab(tab) {
   if (currentRole === 'user' && tab !== 'quick') tab = 'quick';
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  const view = document.getElementById('view-' + tab);
-  if (view) view.classList.add('active');
+  document.getElementById('view-' + tab).classList.add('active');
   if (tab === 'quick') initQuickTab();
   renderAll();
 }
 
-// ===== RENDER =====
+// ===== RENDER LOGIK =====
 function renderAll() {
-  if (currentRole === 'admin') {
-    renderDashboard();
-    renderAssets();
-    renderLoans();
-    renderHistory();
-    renderCards();
-  } else {
-    fillQuickSelect();
-  }
+  if (currentRole === 'admin') { renderDashboard(); renderAssets(); renderLoans(); renderHistory(); }
+  else { fillQuickSelect(); }
 }
 
 function renderDashboard() {
@@ -574,302 +452,104 @@ function renderDashboard() {
     ? `<tr><td colspan="5"><div class="empty"><div class="empty-icon">✓</div><p>Keine aktiven Ausleihen</p></div></td></tr>`
     : loans.map(l => {
         const asset = assets.find(a => a.id === l.assetId);
-        return `<tr>
-          <td><strong>${asset ? asset.name : '?'}</strong></td>
-          <td>${l.person}</td>
-          <td class="mono">${l.userId || '–'}</td>
-          <td class="mono">${l.date}</td>
-          <td><button class="btn btn-sm btn-secondary" onclick="returnAsset('${l.id}')">Zurückgeben</button></td>
-        </tr>`;
+        return `<tr><td><strong>${asset ? asset.name : '?'}</strong></td><td>${l.person}</td><td class="mono">${l.userId || '–'}</td><td class="mono">${l.date}</td><td><button class="btn btn-sm btn-secondary" onclick="returnAsset('${l.id}')">Zurückgeben</button></td></tr>`;
       }).join('');
 }
 
 function renderAssets() {
-  const q = document.getElementById('asset-search')?.value.toLowerCase() || '';
-  const filtered = assets.filter(a =>
-    a.name.toLowerCase().includes(q) || (a.category || '').toLowerCase().includes(q)
-  );
-  const tbody = document.getElementById('assets-table');
+  const q      = document.getElementById('asset-search')?.value.toLowerCase() || '';
+  const filtered = assets.filter(a => a.name.toLowerCase().includes(q) || (a.category||'').toLowerCase().includes(q));
+  const tbody  = document.getElementById('assets-table');
   if (!tbody) return;
-  tbody.innerHTML = filtered.length === 0
-    ? `<tr><td colspan="5"><div class="empty"><div class="empty-icon">📦</div><p>Keine Assets gefunden</p></div></td></tr>`
-    : filtered.map(a => {
-        const avail = (parseInt(a.qty) || 1) - loans.filter(l => l.assetId === a.id).length;
-        return `<tr>
-          <td><strong>${a.name}</strong></td>
-          <td>${a.category || '–'}</td>
-          <td class="mono">${a.serial || '–'}</td>
-          <td>${avail > 0
-            ? `<span class="badge badge-available">${avail} frei</span>`
-            : `<span class="badge badge-loaned">voll</span>`}</td>
-          <td><div class="actions-cell">
-            <button class="btn btn-sm btn-secondary" onclick="openEditAsset('${a.id}')">Bearbeiten</button>
-            <button class="btn btn-sm btn-danger"    onclick="deleteAsset('${a.id}')">✕</button>
-          </div></td>
-        </tr>`;
-      }).join('');
+  tbody.innerHTML = filtered.map(a => {
+    const avail = (parseInt(a.qty) || 1) - loans.filter(l => l.assetId === a.id).length;
+    return `<tr><td><strong>${a.name}</strong></td><td>${a.category||'–'}</td><td class="mono">${a.serial||'–'}</td><td>${avail > 0 ? `<span class="badge badge-available">${avail} frei</span>` : `<span class="badge badge-loaned">voll</span>`}</td><td><div class="actions-cell"><button class="btn btn-sm btn-secondary" onclick="openEditAsset('${a.id}')">Bearbeiten</button><button class="btn btn-sm btn-danger" onclick="deleteAsset('${a.id}')">✕</button></div></td></tr>`;
+  }).join('');
 }
 
 function renderLoans() {
   const tbody = document.getElementById('loans-table');
   if (!tbody) return;
-  tbody.innerHTML = loans.length === 0
-    ? `<tr><td colspan="5"><div class="empty"><div class="empty-icon">✓</div><p>Keine aktiven Ausleihen</p></div></td></tr>`
-    : loans.map(l => {
-        const asset = assets.find(a => a.id === l.assetId);
-        return `<tr>
-          <td><strong>${asset ? asset.name : '?'}</strong></td>
-          <td>${l.person}</td>
-          <td class="mono">${l.userId || '–'}</td>
-          <td class="mono">${l.date}</td>
-          <td><button class="btn btn-sm btn-blue" onclick="returnAsset('${l.id}')">✓ Zurückgeben</button></td>
-        </tr>`;
-      }).join('');
+  tbody.innerHTML = loans.map(l => {
+    const asset = assets.find(a => a.id === l.assetId);
+    return `<tr><td><strong>${asset ? asset.name : '?'}</strong></td><td>${l.person}</td><td class="mono">${l.userId||'–'}</td><td class="mono">${l.date}</td><td><button class="btn btn-sm btn-blue" onclick="returnAsset('${l.id}')">✓ Zurückgeben</button></td></tr>`;
+  }).join('');
 }
 
 function renderHistory() {
   const tbody = document.getElementById('history-table');
   if (!tbody) return;
-  tbody.innerHTML = [...history].reverse().map(h =>
-    `<tr>
-      <td><strong>${h.assetName || '?'}</strong></td>
-      <td>${h.person}</td>
-      <td class="mono">${h.userId || '–'}</td>
-      <td class="mono">${h.loanDate}</td>
-      <td class="mono">${h.returnDate}</td>
-    </tr>`
-  ).join('');
-}
-
-// ===== KARTEN-VERWALTUNG =====
-function renderCards() {
-  const tbody = document.getElementById('cards-table');
-  if (!tbody) return;
-  tbody.innerHTML = cards.length === 0
-    ? `<tr><td colspan="4"><div class="empty"><div class="empty-icon">🪪</div><p>Keine berechtigten Karten hinterlegt</p></div></td></tr>`
-    : cards.map(c => `<tr>
-        <td><strong>${c.owner_name || '–'}</strong></td>
-        <td><span class="badge badge-card mono">${c.card_hex}</span></td>
-        <td class="mono">${c.created_at ? c.created_at.slice(0,10) : '–'}</td>
-        <td>
-          <button class="btn btn-sm btn-danger" onclick="deleteCard('${c.id}', '${escHtml(c.owner_name)}')">✕ Entfernen</button>
-        </td>
-      </tr>`
-    ).join('');
-}
-
-function escHtml(str) {
-  return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-}
-
-// ---- Karte anlegen Modal öffnen ----
-let cardScanActive = false;
-let cardScanBuffer = '';
-let cardScanTimer  = null;
-
-function openAddCardModal() {
-  document.getElementById('card-hex').value    = '';
-  document.getElementById('card-owner').value  = '';
-  document.getElementById('scan-area-result').style.display = 'none';
-  document.getElementById('scan-area-result').textContent   = '';
-  document.getElementById('scan-status').textContent = '';
-  document.getElementById('scan-area').classList.remove('active');
-  cardScanActive = false;
-  document.getElementById('modal-add-card').classList.add('open');
-}
-
-function closeAddCardModal() {
-  cardScanActive = false;
-  closeModal('modal-add-card');
-}
-
-// ---- Scan-Bereich aktivieren (liest Tastatureingaben vom Scanner) ----
-function activateCardScan() {
-  cardScanActive = true;
-  cardScanBuffer = '';
-  const area = document.getElementById('scan-area');
-  area.classList.add('active');
-  document.getElementById('scan-status').textContent = '⌛ Warte auf Karte...';
-  // Fokus auf ein verstecktes Dummy-Feld für den Scanner
-  document.getElementById('card-hex').focus();
-  document.getElementById('card-hex').value = '';
-}
-
-// Synchronisiert manuellen Hex-Input mit dem Scan-Bereich
-function syncHexFromInput(val) {
-  const result = document.getElementById('scan-area-result');
-  if (val.trim()) {
-    result.textContent = val.trim().toUpperCase();
-    result.style.display = 'block';
-    document.getElementById('scan-status').textContent = '✏️ Manuell eingegeben';
-  } else {
-    result.style.display = 'none';
-    document.getElementById('scan-status').textContent = '';
-  }
-}
-
-// Globaler Keydown-Handler für den Karten-Scanner (schnelle Zeichenfolge + Enter)
-document.addEventListener('keydown', function(e) {
-  // Nur aktiv, wenn das Karten-Modal offen ist und scan aktiv
-  if (!cardScanActive) return;
-  if (!document.getElementById('modal-add-card').classList.contains('open')) return;
-
-  if (e.key === 'Enter') {
-    const hex = cardScanBuffer.trim().toUpperCase();
-    cardScanBuffer = '';
-    if (hex.length >= 4) {
-      document.getElementById('card-hex').value = hex;
-      syncHexFromInput(hex);
-      document.getElementById('scan-status').textContent = '✅ Karte erkannt!';
-    }
-    cardScanActive = false;
-    document.getElementById('scan-area').classList.remove('active');
-    return;
-  }
-
-  // Zeichen aufsammeln (Scanner tippt sehr schnell)
-  if (e.key.length === 1) {
-    cardScanBuffer += e.key;
-    // Timeout: Wenn nach 500ms kein Enter kam, Buffer leeren
-    clearTimeout(cardScanTimer);
-    cardScanTimer = setTimeout(() => { cardScanBuffer = ''; }, 500);
-  }
-});
-
-// ---- Karte in Supabase speichern ----
-async function saveCard() {
-  const hex   = document.getElementById('card-hex').value.trim().toUpperCase();
-  const owner = document.getElementById('card-owner').value.trim();
-
-  if (!hex || !owner) {
-    showNotification('Fehler', 'Bitte Hex-Code und Name ausfüllen!', 'error');
-    return;
-  }
-
-  // Duplikat-Check lokal
-  if (cards.some(c => c.card_hex === hex)) {
-    showNotification('Fehler', `Karte "${hex}" ist bereits hinterlegt!`, 'error');
-    return;
-  }
-
-  const payload = { card_hex: hex, owner_name: owner };
-
-  try {
-    const res = await fetch(`${SUPABASE_URL}/auth_cards`, {
-      method:  'POST',
-      headers: supabaseHeaders,
-      body:    JSON.stringify(payload)
-    });
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Supabase Fehler: ${errBody}`);
-    }
-    const saved = await res.json();
-    cards.push(Array.isArray(saved) ? saved[0] : saved);
-    closeAddCardModal();
-    renderCards();
-    showNotification('Erfolg', `Karte von "${owner}" wurde gespeichert.`, 'success');
-  } catch (err) {
-    console.error(err);
-    showNotification('Fehler', err.message, 'error');
-  }
-}
-
-// ---- Karte löschen ----
-async function deleteCard(id, ownerName) {
-  if (!confirm(`Karte von "${ownerName}" wirklich entfernen?`)) return;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/auth_cards?id=eq.${id}`, {
-      method:  'DELETE',
-      headers: supabaseHeaders
-    });
-    if (!res.ok) throw new Error('Löschen fehlgeschlagen');
-    cards = cards.filter(c => c.id != id);
-    renderCards();
-    showNotification('Entfernt', `Karte von "${ownerName}" wurde gelöscht.`, 'info');
-  } catch (err) {
-    showNotification('Fehler', err.message, 'error');
-  }
+  tbody.innerHTML = [...history].reverse().map(h => `<tr><td><strong>${h.assetName||'?'}</strong></td><td>${h.person}</td><td class="mono">${h.userId||'–'}</td><td class="mono">${h.loanDate}</td><td class="mono">${h.returnDate}</td></tr>`).join('');
 }
 
 // ===== SCHNELLZUGANG =====
 function initQuickTab() {
   fillQuickSelect();
-  ['quick-person','quick-userid','return-search'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  const rr = document.getElementById('return-results');
-  if (rr) rr.innerHTML = '';
-  const qd = document.getElementById('quick-date');
-  if (qd) qd.value = new Date().toISOString().split('T')[0];
-  selectedUserForLoan = null;
+  ['quick-person','quick-userid','return-search'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  const rr = document.getElementById('return-results'); if(rr) rr.innerHTML = '';
+  const qd = document.getElementById('quick-date'); if(qd) qd.value = new Date().toISOString().split('T')[0];
 }
 
 function fillQuickSelect() {
   const sel = document.getElementById('quick-asset');
   if (!sel) return;
-  const avail = assets.filter(a =>
-    loans.filter(l => l.assetId === a.id).length < (parseInt(a.qty) || 1)
-  );
+  const avail = assets.filter(a => loans.filter(l => l.assetId === a.id).length < (parseInt(a.qty) || 1));
   sel.innerHTML = avail.length === 0
     ? '<option value="">Keine Assets frei</option>'
     : avail.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 }
 
-// FIX: quickLoan nutzt jetzt ebenfalls den Scanner
+// Ausleihe über Schnellzugriff (300k Validierung)
 async function quickLoan() {
   const assetId = document.getElementById('quick-asset').value;
   const person  = document.getElementById('quick-person').value.trim();
   const userId  = document.getElementById('quick-userid').value.trim();
   const date    = document.getElementById('quick-date').value;
+  if (!person || !assetId) { showNotification('Fehler', 'Bitte alle Pflichtfelder ausfüllen!', 'error'); return; }
 
-  if (!person || !assetId) {
-    showNotification('Fehler', 'Bitte alle Pflichtfelder ausfüllen!', 'error');
-    return;
-  }
   if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
-    showNotification('Fehler', 'Bitte einen Benutzer aus der Vorschlagsliste wählen!', 'error');
+    showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
     return;
   }
 
-  pendingLoanData = {
-    loanPayload: { id: Date.now().toString(), assetId, person, userId, date },
-    isModal: false
-  };
-  openScannerModal();
+  const newLoan = { id: Date.now().toString(), assetId, person, userId, date };
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/loans`, {
+      method: 'POST',
+      headers: supabaseHeaders,
+      body: JSON.stringify(newLoan)
+    });
+    if(!res.ok) throw new Error('Fehler beim Speichern der Ausleihe');
+    
+    loans.push(newLoan);
+    selectedUserForLoan = null;
+    initQuickTab(); renderAll();
+    showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
+  } catch(err) {
+    showNotification('Fehler', err.message, 'error');
+  }
 }
 
-function searchForReturn(nameOrId) {
+function searchForReturn(selectedNameOrId) {
   const container = document.getElementById('return-results');
-  if (!nameOrId) { container.innerHTML = ''; return; }
-  const q = nameOrId.toLowerCase();
-  const matches = loans.filter(l =>
-    l.person.toLowerCase() === q || (l.userId || '').toLowerCase() === q
-  );
-  if (matches.length === 0) {
-    container.innerHTML = '<p style="color:var(--muted);font-size:13px;margin-top:12px">Keine offenen Ausleihen gefunden.</p>';
-    return;
-  }
-  container.innerHTML = '<div class="return-results">' + matches.map(l => {
+  if (!selectedNameOrId) { container.innerHTML = ''; return; }
+  const q = selectedNameOrId.toLowerCase();
+  const matches = loans.filter(l => l.person.toLowerCase() === q || (l.userId||'').toLowerCase() === q);
+  if (matches.length === 0) { container.innerHTML = '<p style="color:var(--muted);font-size:13px;margin-top:12px">Keine offenen Ausleihen für diese Person.</p>'; return; }
+  container.innerHTML = `<div class="return-results">` + matches.map(l => {
     const asset = assets.find(a => a.id === l.assetId);
-    return `<div class="return-item">
-      <div>
-        <div class="return-item-name">${asset ? asset.name : '?'}</div>
-        <div class="return-item-date">${l.person} · ${l.userId || '–'} · seit ${l.date}</div>
-      </div>
-      <button class="btn btn-sm btn-green" onclick="returnAsset('${l.id}')">↩ Zurück</button>
-    </div>`;
-  }).join('') + '</div>';
+    return `<div class="return-item"><div><div class="return-item-name">${asset ? asset.name : '?'}</div><div class="return-item-date">${l.person} · ${l.userId||'–'} · seit ${l.date}</div></div><button class="btn btn-sm btn-green" onclick="returnAsset('${l.id}')">↩ Zurück</button></div>`;
+  }).join('') + `</div>`;
 }
 
-// ===== AUTOFILL =====
+// ===== AUTOFILL (300K LIVE QUERY) =====
+let selectedUserForLoan = null;
+
 async function handleUserAutofill(inputEl, type, isModal = false) {
   const prefix = isModal ? 'loan-' : 'quick-';
   const val    = inputEl.value.trim();
-  const listId = prefix + (type === 'name' ? 'person' : 'userid') + '-suggestions';
-  const listEl = document.getElementById(listId);
-  if (!listEl) return;
+  const listEl = document.getElementById(prefix + (type === 'name' ? 'person' : 'userid') + '-suggestions');
   if (val.length < 3) { listEl.style.display = 'none'; return; }
 
   try {
@@ -880,12 +560,12 @@ async function handleUserAutofill(inputEl, type, isModal = false) {
     );
     const data = await res.json();
     if (!data.length) { listEl.style.display = 'none'; return; }
+
     listEl.innerHTML = data.map(u => {
-      const sName = u.Name.replace(/'/g, "\\'");
-      const sId   = (u['Axa Windows ID'] || '').replace(/'/g, "\\'");
-      return `<div class="autofill-suggestion-item" onclick="selectUserSuggestion('${sName}','${sId}','${prefix}')">
-        <span>${u.Name}</span>
-        <span class="autofill-id">${u['Axa Windows ID'] || ''}</span>
+      const safeName = u.Name.replace(/'/g,"\\'");
+      const safeId = (u['Axa Windows ID']||'').replace(/'/g,"\\'");
+      return `<div class="autofill-suggestion-item" onclick="selectUserSuggestion('${safeName}','${safeId}','${prefix}')">
+        <span>${u.Name}</span><span class="autofill-id">${u['Axa Windows ID'] || ''}</span>
       </div>`;
     }).join('');
     listEl.style.display = 'block';
@@ -905,6 +585,7 @@ async function handleReturnAutofill(inputEl) {
   const val    = inputEl.value.trim();
   const listEl = document.getElementById('return-search-suggestions');
   if (val.length < 3) { listEl.style.display = 'none'; return; }
+
   try {
     const encoded = encodeURIComponent(val);
     const res = await fetch(
@@ -913,14 +594,16 @@ async function handleReturnAutofill(inputEl) {
     );
     const data = await res.json();
     if (!data.length) { listEl.style.display = 'none'; return; }
+
     listEl.innerHTML = data.map(u =>
       `<div class="autofill-suggestion-item" onclick="selectReturnUser('${u.Name.replace(/'/g,"\\'")}')">
-        <span>${u.Name}</span>
-        <span class="autofill-id">${u['Axa Windows ID'] || ''}</span>
+        <span>${u.Name}</span><span class="autofill-id">${u['Axa Windows ID'] || ''}</span>
       </div>`
     ).join('');
     listEl.style.display = 'block';
-  } catch (err) { console.error(err); }
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function selectReturnUser(name) {
@@ -930,9 +613,7 @@ function selectReturnUser(name) {
 }
 
 document.addEventListener('click', e => {
-  if (!e.target.closest('.form-group') && !e.target.closest('.scan-area')) {
-    document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none');
-  }
+  if (!e.target.closest('.form-group')) document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none');
 });
 
 // ===== ASSET AKTIONEN =====
@@ -956,242 +637,235 @@ function openEditAsset(id) {
   document.getElementById('modal-asset').classList.add('open');
 }
 
-function openLoanModal() {
-  fillLoanSelect();
-  // FIX: Datum vorbelegen
-  document.getElementById('loan-date').value = new Date().toISOString().split('T')[0];
-  selectedUserForLoan = null;
-  document.getElementById('loan-person').value = '';
-  document.getElementById('loan-userid').value = '';
-  document.getElementById('modal-loan').classList.add('open');
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-}
+function openLoanModal() { fillLoanSelect(); document.getElementById('modal-loan').classList.add('open'); }
+function closeModal(id)  { document.getElementById(id).classList.remove('open'); }
 
 function fillLoanSelect() {
   const sel   = document.getElementById('loan-asset');
-  const avail = assets.filter(a =>
-    loans.filter(l => l.assetId === a.id).length < (parseInt(a.qty) || 1)
-  );
-  sel.innerHTML = avail.length === 0
-    ? '<option value="">Keine Assets verfügbar</option>'
-    : avail.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  const avail = assets.filter(a => loans.filter(l => l.assetId === a.id).length < (parseInt(a.qty) || 1));
+  sel.innerHTML = avail.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 }
 
 async function saveAsset() {
   const name = document.getElementById('asset-name').value.trim();
   if (!name) return;
-  const id = document.getElementById('asset-id').value;
-  const data = {
-    id:       id || Date.now().toString(),
-    name,
-    category: document.getElementById('asset-category').value.trim(),
-    serial:   document.getElementById('asset-serial').value.trim(),
-    qty:      parseInt(document.getElementById('asset-qty').value) || 1
-  };
+  let id = document.getElementById('asset-id').value;
+  
+  const data = { id: id || Date.now().toString(), name, category: document.getElementById('asset-category').value.trim(), serial: document.getElementById('asset-serial').value.trim(), qty: parseInt(document.getElementById('asset-qty').value) || 1 };
+
   try {
     if (!id) {
-      const res = await fetch(`${SUPABASE_URL}/assets`, {
-        method: 'POST', headers: supabaseHeaders, body: JSON.stringify(data)
-      });
-      if (!res.ok) throw new Error('Fehler beim Hinzufügen');
+      const res = await fetch(`${SUPABASE_URL}/assets`, { method: 'POST', headers: supabaseHeaders, body: JSON.stringify(data) });
+      if(!res.ok) throw new Error('Fehler beim Hinzufügen');
       assets.push(data);
     } else {
-      const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, {
-        method: 'PATCH', headers: supabaseHeaders, body: JSON.stringify(data)
-      });
-      if (!res.ok) throw new Error('Fehler beim Aktualisieren');
-      const idx = assets.findIndex(a => a.id === id);
-      if (idx !== -1) assets[idx] = data;
+      const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, { method: 'PATCH', headers: supabaseHeaders, body: JSON.stringify(data) });
+      if(!res.ok) throw new Error('Fehler beim Updaten');
+      const idx = assets.findIndex(a => a.id === id); if (idx !== -1) assets[idx] = data;
     }
-    renderAll();
-    closeModal('modal-asset');
-  } catch (err) {
-    showNotification('Fehler', err.message, 'error');
-  }
+    renderAll(); closeModal('modal-asset');
+  } catch(err) { alert(err.message); }
 }
 
 async function deleteAsset(id) {
-  if (!confirm('Möchtest du dieses Asset wirklich löschen?')) return;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, {
-      method: 'DELETE', headers: supabaseHeaders
-    });
-    if (!res.ok) throw new Error('Asset konnte nicht gelöscht werden.');
-    assets = assets.filter(a => a.id !== id);
-    renderAll();
-  } catch (err) {
-    showNotification('Fehler', err.message, 'error');
+  if (confirm('Möchtest du dieses Asset wirklich löschen?')) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, { method: 'DELETE', headers: supabaseHeaders });
+      if(!res.ok) throw new Error('Asset konnte nicht gelöscht werden.');
+      assets = assets.filter(a => a.id !== id); renderAll();
+    } catch(err) { alert(err.message); }
   }
 }
 
-// ===== AUSLEIHE (Admin Modal) =====
+// ===== GLOBAL STATE ERWEITERUNG =====
+let pendingLoanData = null; // Speichert die Ausleihe, bis die Karte bestätigt wurde
+
+// ===== ASSET MANAGEMENT (ANGEPASST FÜR KARTENABFRAGE) =====
+
+// 1. Ausleihe über den Admin-Modal
 async function saveLoan() {
   const assetId = document.getElementById('loan-asset').value;
   const person  = document.getElementById('loan-person').value.trim();
   const userId  = document.getElementById('loan-userid').value.trim();
   const date    = document.getElementById('loan-date').value;
-
   if (!person || !assetId) return;
+
   if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
-    showNotification('Fehler', 'Bitte einen Benutzer aus der Vorschlagsliste wählen!', 'error');
+    showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
     return;
   }
-
-  pendingLoanData = {
+  
+  // Daten zwischenspeichern statt direkt senden
+  pendingLoanData = { 
     loanPayload: { id: Date.now().toString(), assetId, person, userId, date },
-    isModal: true
+    isModal: true 
   };
+
+  
+  // Kartenabfrage starten
   openScannerModal();
 }
 
-// ===== SCANNER (Ausleihe-Bestätigung) =====
-function openScannerModal() {
-  const modal = document.getElementById('modal-scanner');
-  modal.classList.add('open');
-  modal.style.display = 'flex';
 
-  document.getElementById('scanner-icon').textContent    = '💳';
-  document.getElementById('scanner-title').textContent   = 'Mitarbeiter-Karte benötigt';
+// ===== KARTENSCANNER CORE LOGIK =====
+
+function openScannerModal() {
+  document.getElementById('modal-scanner').style.display = 'flex';
+  const inputEl = document.getElementById('scanner-hidden-input');
+  inputEl.value = '';
+  inputEl.focus();
+
+  // Icon und Texte zurücksetzen, falls vorher ein Fehler war
+  document.getElementById('scanner-icon').textContent = '💳';
+  document.getElementById('scanner-title').textContent = 'Mitarbeiter-Karte benötigt';
   document.getElementById('scanner-message').textContent = 'Bitte die Autorisierungs-Karte an den Scanner halten...';
   document.getElementById('scanner-message').style.color = 'var(--muted)';
 
-  const input = document.getElementById('scanner-hidden-input');
-  input.value    = '';
-  input.disabled = false;
-  input.focus();
-
-  // Fokus halten
-  document.onclick = () => {
-    if (modal.style.display === 'flex') input.focus();
+  // Fokus erzwingen: Klickt der User irgendwo hin, holen wir den Fokus zurück auf das Inputfeld
+  document.onclick = function(e) {
+    if(document.getElementById('modal-scanner').style.display === 'flex') {
+      inputEl.focus();
+    }
   };
 }
 
 function cancelScanner() {
   document.getElementById('modal-scanner').style.display = 'none';
   pendingLoanData = null;
-  document.onclick = null;
+  document.onclick = null; // Klick-Fokus entfernen
 }
 
+// Event-Listener für das unsichtbare Input-Feld (wartet auf das Enter vom Scanner)
 document.getElementById('scanner-hidden-input').addEventListener('keydown', async function(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
-    const hex = this.value.trim().toUpperCase();
-    if (!hex) return;
-    this.disabled = true;
-    await verifyCardInSupabase(hex);
+    const scannedHex = this.value.trim().toUpperCase();
+    if (!scannedHex) return;
+
+    this.disabled = true; // Weitere Eingaben blockieren während dem DB Check
+    await verifyCardInSupabase(scannedHex);
     this.disabled = false;
     this.value = '';
   }
 });
 
+// Abfrage gegen die neue Supabase-Tabelle
 async function verifyCardInSupabase(hexCode) {
-  const msgEl   = document.getElementById('scanner-message');
+  const msgEl  = document.getElementById('scanner-message');
   const titleEl = document.getElementById('scanner-title');
   const iconEl  = document.getElementById('scanner-icon');
+
   msgEl.textContent = 'Prüfe Berechtigung...';
-  msgEl.style.color = 'var(--accent2)';
+  msgEl.style.color = 'var(--blue)';
 
   try {
-    const res = await fetch(
-      `${SUPABASE_URL}/auth_cards?card_hex=eq.${encodeURIComponent(hexCode)}`,
-      { headers: supabaseHeaders }
-    );
-    const result = await res.json();
+    // Live-Abfrage an deine neue auth_cards Tabelle
+    const res = await fetch(`${SUPABASE_URL}/auth_cards?card_hex=eq.${encodeURIComponent(hexCode)}`, { 
+      headers: supabaseHeaders 
+    });
+    const cards = await res.json();
 
-    if (result && result.length > 0) {
-      const owner = result[0].owner_name || 'Mitarbeiter';
-      iconEl.textContent  = '✅';
+    if (cards && cards.length > 0) {
+      const cardOwner = cards[0].owner_name || 'Mitarbeiter';
+      
+      // Visuelles Feedback bei Erfolg
+      iconEl.textContent = '✅';
       titleEl.textContent = 'Bestätigt!';
-      msgEl.textContent   = `Karte von ${owner} erkannt.`;
-      msgEl.style.color   = 'var(--green)';
-      setTimeout(executeFinalLoan, 1000);
+      msgEl.textContent = `Karte von ${cardOwner} erkannt.`;
+      msgEl.style.color = '#10b981'; // Grün
+
+      // Kurze Verzögerung für die Animation, dann speichern
+      setTimeout(async () => {
+        await executeFinalLoan();
+      }, 1000);
+
     } else {
-      iconEl.textContent  = '❌';
+      // Karte nicht in der DB gefunden
+      iconEl.textContent = '❌';
       titleEl.textContent = 'Zugriff verweigert';
-      msgEl.textContent   = `Unbekannte Karte (${hexCode}). Nicht berechtigt.`;
-      msgEl.style.color   = 'var(--danger)';
+      msgEl.textContent = `Unbekannte Karte (${hexCode}).`;
+      msgEl.style.color = '#ef4444'; // Rot
     }
   } catch (err) {
-    console.error(err);
-    msgEl.textContent = 'Datenbankfehler bei der Kartenprüfung.';
-    msgEl.style.color = 'var(--danger)';
+    console.error('Kartenprüfungsfehler:', err);
+    msgEl.textContent = 'Datenbank-Fehler bei der Kartenprüfung.';
+    msgEl.style.color = '#ef4444';
   }
 }
 
+// Führt das eigentliche POST-Event an Supabase aus, nachdem die Karte gültig war
 async function executeFinalLoan() {
   if (!pendingLoanData) return;
   const { loanPayload, isModal } = pendingLoanData;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/loans`, {
-      method:  'POST',
-      headers: supabaseHeaders,
-      body:    JSON.stringify(loanPayload)
-    });
-    if (!res.ok) throw new Error('Fehler beim Speichern der Ausleihe');
 
+  try {
+    const res = await fetch(`${SUPABASE_URL}/loans`, { 
+      method: 'POST', 
+      headers: supabaseHeaders, 
+      body: JSON.stringify(loanPayload) 
+    });
+    
+    if(!res.ok) throw new Error('Fehler beim finalen Speichern der Ausleihe');
+    
     loans.push(loanPayload);
     selectedUserForLoan = null;
-    pendingLoanData     = null;
+    pendingLoanData = null;
 
+    // Modals schließen und UI aktualisieren
     document.getElementById('modal-scanner').style.display = 'none';
-    document.onclick = null;
-
-    if (isModal) closeModal('modal-loan');
-    else         initQuickTab();
-
+    document.onclick = null; // Klick-Fokus entfernen
+    
+    if (isModal) {
+      closeModal('modal-loan');
+    } else {
+      initQuickTab();
+    }
+    
     renderAll();
     showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
-  } catch (err) {
+  } catch(err) {
     document.getElementById('modal-scanner').style.display = 'none';
-    showNotification('Fehler', err.message, 'error');
+    alert(err.message);
   }
 }
 
-// ===== RÜCKGABE =====
 async function returnAsset(loanId) {
   const loan  = loans.find(l => l.id === loanId);
   if (!loan) return;
   const asset = assets.find(a => a.id === loan.assetId);
-  const historyData = {
-    assetId:    loan.assetId,
-    assetName:  asset ? asset.name : '?',
-    person:     loan.person,
-    userId:     loan.userId || '',
-    loanDate:   loan.date,
-    returnDate: new Date().toISOString().split('T')[0]
-  };
+  
+  const historyData = { assetId: loan.assetId, assetName: asset ? asset.name : '?', person: loan.person, userId: loan.userId || '', loanDate: loan.date, returnDate: new Date().toISOString().split('T')[0] };
+
   try {
-    const resDel = await fetch(`${SUPABASE_URL}/loans?id=eq.${loanId}`, {
-      method: 'DELETE', headers: supabaseHeaders
-    });
-    if (!resDel.ok) throw new Error('Fehler beim Entfernen der Ausleihe');
-    await fetch(`${SUPABASE_URL}/history`, {
-      method: 'POST', headers: supabaseHeaders, body: JSON.stringify(historyData)
-    });
+    const resDel = await fetch(`${SUPABASE_URL}/loans?id=eq.${loanId}`, { method: 'DELETE', headers: supabaseHeaders });
+    if(!resDel.ok) throw new Error('Fehler beim Entfernen der Ausleihe');
+
+    await fetch(`${SUPABASE_URL}/history`, { method: 'POST', headers: supabaseHeaders, body: JSON.stringify(historyData) });
+
     loans = loans.filter(l => l.id !== loanId);
     history.push(historyData);
     renderAll();
     searchForReturn(document.getElementById('return-search').value);
     showNotification('Rückgabe', 'Asset erfolgreich zurückgegeben.', 'info');
-  } catch (err) {
-    showNotification('Fehler', err.message, 'error');
-  }
+  } catch(err) { alert(err.message); }
 }
 
-// ===== EXPORT =====
 function exportExcel() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(assets),  'Assets');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(loans),   'Ausleihen');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(history), 'Historie');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cards),   'Karten');
   XLSX.writeFile(wb, 'AssetTrack_Export.xlsx');
 }
+
+// ===== INIT =====
+initRole();
+loadAllDataFromSupabase();
 </script>
 </body>
 </html>
-ENDOFFILE
-echo "Done"
+
+
+
+
+
