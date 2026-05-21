@@ -626,17 +626,42 @@ function cancelScanner() {
   document.onclick = null;
 }
 
-document.getElementById('scanner-hidden-input').addEventListener('keydown', async function(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    const scannedHex = this.value.trim().toUpperCase();
-    if (!scannedHex) return;
-    this.disabled = true;
-    await verifyCardInSupabase(scannedHex);
-    this.disabled = false;
-    this.value = '';
-  }
-});
+  async function executeFinalLoan() {
+  if (!pendingLoanData) return;
+  const { loanPayload, isModal } = pendingLoanData;
+
+  // Hier wird 'assetId' automatisch auf deinen Tabellennamen 'assedId' umgebogen
+  const dbPayload = {
+    id: loanPayload.id,
+    assedId: loanPayload.assetId, 
+    person: loanPayload.person,
+    userId: loanPayload.userId,
+    date: loanPayload.date
+  };
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/loans`, { 
+      method: 'POST', 
+      headers: supabaseHeaders, 
+      body: JSON.stringify(dbPayload) 
+    });
+    
+    if(!res.ok) throw new Error('Fehler beim Speichern');
+    
+    loans.push(loanPayload);
+    selectedUserForLoan = null;
+    pendingLoanData = null;
+    
+    // Fix: Ein ".style" zu viel entfernt, damit das Modal sauber schließt
+    document.getElementById('modal-scanner').style.display = 'none';
+    document.onclick = null;
+    
+    if (isModal) closeModal('modal-loan'); else initQuickTab();
+    renderAll();
+    showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
+  } catch(err) { alert(err.message); }
+}
+  
 
 async function verifyCardInSupabase(hexCode) {
   const msgEl  = document.getElementById('scanner-message');
@@ -673,13 +698,29 @@ async function executeFinalLoan() {
   if (!pendingLoanData) return;
   const { loanPayload, isModal } = pendingLoanData;
 
+  // Hier wird 'assetId' automatisch auf deinen Tabellennamen 'assedId' umgebogen
+  const dbPayload = {
+    id: loanPayload.id,
+    assedId: loanPayload.assetId, 
+    person: loanPayload.person,
+    userId: loanPayload.userId,
+    date: loanPayload.date
+  };
+
   try {
-    const res = await fetch(`${SUPABASE_URL}/loans`, { method: 'POST', headers: supabaseHeaders, body: JSON.stringify(loanPayload) });
+    const res = await fetch(`${SUPABASE_URL}/loans`, { 
+      method: 'POST', 
+      headers: supabaseHeaders, 
+      body: JSON.stringify(dbPayload) 
+    });
+    
     if(!res.ok) throw new Error('Fehler beim Speichern');
     
     loans.push(loanPayload);
     selectedUserForLoan = null;
     pendingLoanData = null;
+    
+    // Fix: Ein ".style" zu viel entfernt, damit das Modal sauber schließt
     document.getElementById('modal-scanner').style.display = 'none';
     document.onclick = null;
     
