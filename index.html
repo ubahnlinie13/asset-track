@@ -290,6 +290,21 @@
   </div>
 </div>
 
+<div id="modal-scanner" class="modal-overlay" style="position:fixed; inset:0; background:rgba(15,15,15,0.95); backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; z-index:1000; display:none;">
+  <div class="modal" style="width:400px; text-align:center; padding:32px; border:2px solid var(--border);">
+    <div id="scanner-icon" style="font-size:48px; margin-bottom:16px; transition: all 0.3s;">💳</div>
+    <h3 id="scanner-title" style="margin-bottom:8px;">Mitarbeiter-Karte benötigt</h3>
+    <p id="scanner-message" style="color:var(--muted); font-size:14px; margin-bottom:24px;">Bitte die Autorisierungs-Karte an den Scanner halten...</p>
+    
+    <input type="text" id="scanner-hidden-input" autocomplete="off" style="position:absolute; opacity:0; pointer-events:none;">
+    
+    <div style="display:flex; gap:12px; justify-content:center;">
+      <button class="btn btn-secondary" onclick="cancelScanner()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+  
+
   <div id="modal-scanner" class="modal-overlay" style="position:fixed; inset:0; background:rgba(15,15,15,0.95); backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; z-index:1000; display:none;">
   <div class="modal" style="width:400px; text-align:center; padding:32px; border:2px solid var(--border);">
     <div id="scanner-icon" style="font-size:48px; margin-bottom:16px; transition: all 0.3s;">💳</div>
@@ -314,12 +329,11 @@
 </div>
 
   
-  <script>
- // ===== SUPABASE CONFIG =====
+<script>
+// ===== SUPABASE CONFIG =====
 const SUPABASE_URL = 'https://ugdoqrbiampugaivjisy.supabase.co/rest/v1';
 const SUPABASE_KEY = 'sb_publishable_9-G0EAi-CKu64e8t49uZOQ_rhTQ-YGv';
 
-// ===== HEADERS HELPERS =====
 const supabaseHeaders = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -328,26 +342,24 @@ const supabaseHeaders = {
 };
 
 // ===== STATE =====
-let assets        = [];
-let loans         = [];
-let history       = [];
+let assets          = [];
+let loans           = [];
+let history         = [];
+let currentRole     = 'user'; // Startet IMMER im sicheren User-Modus
+let pendingLoanData = null;   // Zwischenspeicher für die Kartenabfrage
+let selectedUserForLoan = null;
 
-// WICHTIG: Wir starten JETZT IMMER als 'user'. 
-// Kein Speichern des Admin-Status im localStorage mehr, damit ein Refresh die Sperre nicht umgeht!
-let currentRole   = 'user'; 
-
-// Lädt alle Daten live aus Supabase
+// ===== DATABASE LIVE-SYNC =====
 async function loadAllDataFromSupabase() {
   setUserStatus('loading', 'Lade Datenbank...');
   try {
-    // Assets und aktive Ausleihen laden (brauchen beide Rollen)
     const resAssets = await fetch(`${SUPABASE_URL}/assets?select=*`, { headers: supabaseHeaders });
     if (resAssets.ok) assets = await resAssets.json();
 
     const resLoans = await fetch(`${SUPABASE_URL}/loans?select=*`, { headers: supabaseHeaders });
     if (resLoans.ok) loans = await resLoans.json();
 
-    // Die Historie laden wir NUR, wenn der Nutzer sich bereits erfolgreich als Admin authentifiziert hat
+    // Historie wird nur geladen, wenn man eingeloggt und Admin ist!
     if (currentRole === 'admin') {
       const resHist = await fetch(`${SUPABASE_URL}/history?select=*`, { headers: supabaseHeaders });
       if (resHist.ok) history = await resHist.json();
@@ -357,7 +369,7 @@ async function loadAllDataFromSupabase() {
     renderAll();
 
   } catch (err) {
-    console.error('Fehler beim Laden der Supabase-Daten:', err);
+    console.error('Fehler beim Laden:', err);
     setUserStatus('error', 'Datenbank-Verbindung fehlgeschlagen');
   }
 }
@@ -365,47 +377,39 @@ async function loadAllDataFromSupabase() {
 function setUserStatus(status, text) {
   const dot = document.getElementById('user-status-dot');
   const txt = document.getElementById('user-status-text');
-  if(!dot || !txt) return;
-  dot.className = 'user-status-dot ' + status;
-  txt.textContent = text;
+  if(dot && txt) { dot.className = 'user-status-dot ' + status; txt.textContent = text; }
 }
 
 // ===== NOTIFICATION =====
 function showNotification(title, message, type = 'success') {
   const wrapper = document.getElementById('notify-wrapper');
   const iconEl  = document.getElementById('notify-icon');
-  wrapper.className      = 'modal modal-notify notify-' + type;
-  document.getElementById('notify-title').textContent   = title;
+  if(!wrapper) return;
+  wrapper.className = 'modal modal-notify notify-' + type;
+  document.getElementById('notify-title').textContent = title;
   document.getElementById('notify-message').textContent = message;
   iconEl.textContent = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
   document.getElementById('modal-notification').classList.add('open');
 }
 
-// ===== ROLLENWECHSEL MIT PASSWORT =====
 // ===== ROLLENWECHSEL MIT PASSWORT-ZWANG =====
 async function handleRoleChange(newRole) {
-  // Wenn jemand in die Admin-View will (egal ob beim Wechseln oder beim Start)
   if (newRole === 'admin') {
     const password = prompt("Admin-Passwort erforderlich:");
     
-    // Dein Master-Passwort
+    // HIER DEIN PASSWORT EINTRAGEN
     if (password === "1234") { 
       currentRole = 'admin';
-      
-      // Jetzt erst laden wir die restlichen Admin-Daten (Historie) nach
-      await loadAllDataFromSupabase(); 
+      await loadAllDataFromSupabase(); // Lädt jetzt die Admin-Historie nach
       initRole();
       showNotification('Erfolg', 'Admin-Bereich freigeschaltet!', 'success');
     } else {
-      showNotification('Fehler', 'Falsches Passwort! Zugriff verweigert.', 'error');
-      // Dropdown im UI hart auf 'user' zurücksetzen
+      showNotification('Fehler', 'Falsches Passwort!', 'error');
       document.getElementById('global-role-select').value = 'user';
     }
   } else {
-    // Zurück zu User geht immer sofort
     currentRole = 'user';
-    // Historie aus dem Speicher löschen, damit sie im User-Modus nicht mehr im RAM liegt
-    history = []; 
+    history = []; // Geladene Historie aus RAM löschen
     initRole();
   }
 }
@@ -416,13 +420,13 @@ function initRole() {
 
   if (currentRole === 'user') {
     document.body.classList.add('role-user');
-    switchTab('quick'); // Schickt den User direkt zum Schnellzugang
+    switchTab('quick');
   } else {
     document.body.classList.remove('role-user');
-    switchTab('dashboard'); // Schickt den Admin zum Dashboard
+    switchTab('dashboard');
   }
 }
-    
+
 // ===== TABS =====
 function switchTab(tab) {
   if (currentRole === 'user' && tab !== 'quick') tab = 'quick';
@@ -499,53 +503,7 @@ function fillQuickSelect() {
     : avail.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 }
 
-// Ausleihe über Schnellzugriff (300k Validierung)
-async function quickLoan() {
-  const assetId = document.getElementById('quick-asset').value;
-  const person  = document.getElementById('quick-person').value.trim();
-  const userId  = document.getElementById('quick-userid').value.trim();
-  const date    = document.getElementById('quick-date').value;
-  if (!person || !assetId) { showNotification('Fehler', 'Bitte alle Pflichtfelder ausfüllen!', 'error'); return; }
-
-  if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
-    showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
-    return;
-  }
-
-  const newLoan = { id: Date.now().toString(), assetId, person, userId, date };
-
-  try {
-    const res = await fetch(`${SUPABASE_URL}/loans`, {
-      method: 'POST',
-      headers: supabaseHeaders,
-      body: JSON.stringify(newLoan)
-    });
-    if(!res.ok) throw new Error('Fehler beim Speichern der Ausleihe');
-    
-    loans.push(newLoan);
-    selectedUserForLoan = null;
-    initQuickTab(); renderAll();
-    showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
-  } catch(err) {
-    showNotification('Fehler', err.message, 'error');
-  }
-}
-
-function searchForReturn(selectedNameOrId) {
-  const container = document.getElementById('return-results');
-  if (!selectedNameOrId) { container.innerHTML = ''; return; }
-  const q = selectedNameOrId.toLowerCase();
-  const matches = loans.filter(l => l.person.toLowerCase() === q || (l.userId||'').toLowerCase() === q);
-  if (matches.length === 0) { container.innerHTML = '<p style="color:var(--muted);font-size:13px;margin-top:12px">Keine offenen Ausleihen für diese Person.</p>'; return; }
-  container.innerHTML = `<div class="return-results">` + matches.map(l => {
-    const asset = assets.find(a => a.id === l.assetId);
-    return `<div class="return-item"><div><div class="return-item-name">${asset ? asset.name : '?'}</div><div class="return-item-date">${l.person} · ${l.userId||'–'} · seit ${l.date}</div></div><button class="btn btn-sm btn-green" onclick="returnAsset('${l.id}')">↩ Zurück</button></div>`;
-  }).join('') + `</div>`;
-}
-
-// ===== AUTOFILL (300K LIVE QUERY) =====
-let selectedUserForLoan = null;
-
+// ===== 300K LIVE-AUTOFILL =====
 async function handleUserAutofill(inputEl, type, isModal = false) {
   const prefix = isModal ? 'loan-' : 'quick-';
   const val    = inputEl.value.trim();
@@ -556,7 +514,7 @@ async function handleUserAutofill(inputEl, type, isModal = false) {
     const encoded = encodeURIComponent(val);
     const res = await fetch(
       `${SUPABASE_URL}/User_Data?select=Name,Axa%20Windows%20ID&or=(Name.ilike.*${encoded}*,Axa%20Windows%20ID.ilike.*${encoded}*)&limit=10`,
-      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+      { headers: supabaseHeaders }
     );
     const data = await res.json();
     if (!data.length) { listEl.style.display = 'none'; return; }
@@ -569,9 +527,7 @@ async function handleUserAutofill(inputEl, type, isModal = false) {
       </div>`;
     }).join('');
     listEl.style.display = 'block';
-  } catch (err) {
-    console.error('Autofill error:', err);
-  }
+  } catch (err) { console.error(err); }
 }
 
 function selectUserSuggestion(name, id, prefix) {
@@ -590,7 +546,7 @@ async function handleReturnAutofill(inputEl) {
     const encoded = encodeURIComponent(val);
     const res = await fetch(
       `${SUPABASE_URL}/User_Data?select=Name,Axa%20Windows%20ID&or=(Name.ilike.*${encoded}*,Axa%20Windows%20ID.ilike.*${encoded}*)&limit=10`,
-      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+      { headers: supabaseHeaders }
     );
     const data = await res.json();
     if (!data.length) { listEl.style.display = 'none'; return; }
@@ -601,9 +557,7 @@ async function handleReturnAutofill(inputEl) {
       </div>`
     ).join('');
     listEl.style.display = 'block';
-  } catch (err) {
-    console.error(err);
-  }
+  } catch (err) { console.error(err); }
 }
 
 function selectReturnUser(name) {
@@ -615,6 +569,137 @@ function selectReturnUser(name) {
 document.addEventListener('click', e => {
   if (!e.target.closest('.form-group')) document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none');
 });
+
+// ===== AUSLEIHEN & KARTENABFRAGE =====
+async function saveLoan() {
+  const assetId = document.getElementById('loan-asset').value;
+  const person  = document.getElementById('loan-person').value.trim();
+  const userId  = document.getElementById('loan-userid').value.trim();
+  const date    = document.getElementById('loan-date').value;
+  if (!person || !assetId) return;
+
+  if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
+    showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
+    return;
+  }
+  
+  pendingLoanData = { loanPayload: { id: Date.now().toString(), assetId, person, userId, date }, isModal: true };
+  openScannerModal();
+}
+
+async function quickLoan() {
+  const assetId = document.getElementById('quick-asset').value;
+  const person  = document.getElementById('quick-person').value.trim();
+  const userId  = document.getElementById('quick-userid').value.trim();
+  const date    = document.getElementById('quick-date').value;
+  if (!person || !assetId) { showNotification('Fehler', 'Bitte alle Pflichtfelder ausfüllen!', 'error'); return; }
+
+  if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
+    showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
+    return;
+  }
+
+  pendingLoanData = { loanPayload: { id: Date.now().toString(), assetId, person, userId, date }, isModal: false };
+  openScannerModal();
+}
+
+// ===== KARTENSCANNER STRUKTUR =====
+function openScannerModal() {
+  document.getElementById('modal-scanner').style.display = 'flex';
+  const inputEl = document.getElementById('scanner-hidden-input');
+  inputEl.value = '';
+  inputEl.focus();
+
+  document.getElementById('scanner-icon').textContent = '💳';
+  document.getElementById('scanner-title').textContent = 'Mitarbeiter-Karte benötigt';
+  document.getElementById('scanner-message').textContent = 'Bitte die Autorisierungs-Karte an den Scanner halten...';
+  document.getElementById('scanner-message').style.color = 'var(--muted)';
+
+  document.onclick = function(e) {
+    if(document.getElementById('modal-scanner').style.display === 'flex') inputEl.focus();
+  };
+}
+
+function cancelScanner() {
+  document.getElementById('modal-scanner').style.display = 'none';
+  pendingLoanData = null;
+  document.onclick = null;
+}
+
+document.getElementById('scanner-hidden-input').addEventListener('keydown', async function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const scannedHex = this.value.trim().toUpperCase();
+    if (!scannedHex) return;
+    this.disabled = true;
+    await verifyCardInSupabase(scannedHex);
+    this.disabled = false;
+    this.value = '';
+  }
+});
+
+async function verifyCardInSupabase(hexCode) {
+  const msgEl  = document.getElementById('scanner-message');
+  const titleEl = document.getElementById('scanner-title');
+  const iconEl  = document.getElementById('scanner-icon');
+  msgEl.textContent = 'Prüfe Berechtigung...';
+  msgEl.style.color = 'var(--blue)';
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth_cards?card_hex=eq.${encodeURIComponent(hexCode)}`, { headers: supabaseHeaders });
+    const cards = await res.json();
+
+    if (cards && cards.length > 0) {
+      const cardOwner = cards[0].owner_name || 'Mitarbeiter';
+      iconEl.textContent = '✅';
+      titleEl.textContent = 'Bestätigt!';
+      msgEl.textContent = `Karte von ${cardOwner} erkannt.`;
+      msgEl.style.color = '#10b981';
+      setTimeout(async () => { await executeFinalLoan(); }, 1000);
+    } else {
+      iconEl.textContent = '❌';
+      titleEl.textContent = 'Zugriff verweigert';
+      msgEl.textContent = `Unbekannte Karte (${hexCode}).`;
+      msgEl.style.color = '#ef4444';
+    }
+  } catch (err) {
+    console.error(err);
+    msgEl.textContent = 'Datenbank-Fehler.';
+    msgEl.style.color = '#ef4444';
+  }
+}
+
+async function executeFinalLoan() {
+  if (!pendingLoanData) return;
+  const { loanPayload, isModal } = pendingLoanData;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/loans`, { method: 'POST', headers: supabaseHeaders, body: JSON.stringify(loanPayload) });
+    if(!res.ok) throw new Error('Fehler beim Speichern');
+    
+    loans.push(loanPayload);
+    selectedUserForLoan = null;
+    pendingLoanData = null;
+    document.getElementById('modal-scanner').style.display = 'none';
+    document.onclick = null;
+    
+    if (isModal) closeModal('modal-loan'); else initQuickTab();
+    renderAll();
+    showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
+  } catch(err) { alert(err.message); }
+}
+
+function searchForReturn(selectedNameOrId) {
+  const container = document.getElementById('return-results');
+  if (!selectedNameOrId) { container.innerHTML = ''; return; }
+  const q = selectedNameOrId.toLowerCase();
+  const matches = loans.filter(l => l.person.toLowerCase() === q || (l.userId||'').toLowerCase() === q);
+  if (matches.length === 0) { container.innerHTML = '<p style="color:var(--muted);font-size:13px;margin-top:12px">Keine offenen Ausleihen für diese Person.</p>'; return; }
+  container.innerHTML = `<div class="return-results">` + matches.map(l => {
+    const asset = assets.find(a => a.id === l.assetId);
+    return `<div class="return-item"><div><div class="return-item-name">${asset ? asset.name : '?'}</div><div class="return-item-date">${l.person} · ${l.userId||'–'} · seit ${l.date}</div></div><button class="btn btn-sm btn-green" onclick="returnAsset('${l.id}')">↩ Zurück</button></div>`;
+  }).join('') + `</div>`;
+}
 
 // ===== ASSET AKTIONEN =====
 function openAddAsset() {
@@ -650,7 +735,6 @@ async function saveAsset() {
   const name = document.getElementById('asset-name').value.trim();
   if (!name) return;
   let id = document.getElementById('asset-id').value;
-  
   const data = { id: id || Date.now().toString(), name, category: document.getElementById('asset-category').value.trim(), serial: document.getElementById('asset-serial').value.trim(), qty: parseInt(document.getElementById('asset-qty').value) || 1 };
 
   try {
@@ -671,161 +755,9 @@ async function deleteAsset(id) {
   if (confirm('Möchtest du dieses Asset wirklich löschen?')) {
     try {
       const res = await fetch(`${SUPABASE_URL}/assets?id=eq.${id}`, { method: 'DELETE', headers: supabaseHeaders });
-      if(!res.ok) throw new Error('Asset konnte nicht gelöscht werden.');
+      if(!res.ok) throw new Error('Fehler beim Löschen');
       assets = assets.filter(a => a.id !== id); renderAll();
     } catch(err) { alert(err.message); }
-  }
-}
-
-// ===== GLOBAL STATE ERWEITERUNG =====
-let pendingLoanData = null; // Speichert die Ausleihe, bis die Karte bestätigt wurde
-
-// ===== ASSET MANAGEMENT (ANGEPASST FÜR KARTENABFRAGE) =====
-
-// 1. Ausleihe über den Admin-Modal
-async function saveLoan() {
-  const assetId = document.getElementById('loan-asset').value;
-  const person  = document.getElementById('loan-person').value.trim();
-  const userId  = document.getElementById('loan-userid').value.trim();
-  const date    = document.getElementById('loan-date').value;
-  if (!person || !assetId) return;
-
-  if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
-    showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
-    return;
-  }
-  
-  // Daten zwischenspeichern statt direkt senden
-  pendingLoanData = { 
-    loanPayload: { id: Date.now().toString(), assetId, person, userId, date },
-    isModal: true 
-  };
-
-  
-  // Kartenabfrage starten
-  openScannerModal();
-}
-
-
-// ===== KARTENSCANNER CORE LOGIK =====
-
-function openScannerModal() {
-  document.getElementById('modal-scanner').style.display = 'flex';
-  const inputEl = document.getElementById('scanner-hidden-input');
-  inputEl.value = '';
-  inputEl.focus();
-
-  // Icon und Texte zurücksetzen, falls vorher ein Fehler war
-  document.getElementById('scanner-icon').textContent = '💳';
-  document.getElementById('scanner-title').textContent = 'Mitarbeiter-Karte benötigt';
-  document.getElementById('scanner-message').textContent = 'Bitte die Autorisierungs-Karte an den Scanner halten...';
-  document.getElementById('scanner-message').style.color = 'var(--muted)';
-
-  // Fokus erzwingen: Klickt der User irgendwo hin, holen wir den Fokus zurück auf das Inputfeld
-  document.onclick = function(e) {
-    if(document.getElementById('modal-scanner').style.display === 'flex') {
-      inputEl.focus();
-    }
-  };
-}
-
-function cancelScanner() {
-  document.getElementById('modal-scanner').style.display = 'none';
-  pendingLoanData = null;
-  document.onclick = null; // Klick-Fokus entfernen
-}
-
-// Event-Listener für das unsichtbare Input-Feld (wartet auf das Enter vom Scanner)
-document.getElementById('scanner-hidden-input').addEventListener('keydown', async function(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    const scannedHex = this.value.trim().toUpperCase();
-    if (!scannedHex) return;
-
-    this.disabled = true; // Weitere Eingaben blockieren während dem DB Check
-    await verifyCardInSupabase(scannedHex);
-    this.disabled = false;
-    this.value = '';
-  }
-});
-
-// Abfrage gegen die neue Supabase-Tabelle
-async function verifyCardInSupabase(hexCode) {
-  const msgEl  = document.getElementById('scanner-message');
-  const titleEl = document.getElementById('scanner-title');
-  const iconEl  = document.getElementById('scanner-icon');
-
-  msgEl.textContent = 'Prüfe Berechtigung...';
-  msgEl.style.color = 'var(--blue)';
-
-  try {
-    // Live-Abfrage an deine neue auth_cards Tabelle
-    const res = await fetch(`${SUPABASE_URL}/auth_cards?card_hex=eq.${encodeURIComponent(hexCode)}`, { 
-      headers: supabaseHeaders 
-    });
-    const cards = await res.json();
-
-    if (cards && cards.length > 0) {
-      const cardOwner = cards[0].owner_name || 'Mitarbeiter';
-      
-      // Visuelles Feedback bei Erfolg
-      iconEl.textContent = '✅';
-      titleEl.textContent = 'Bestätigt!';
-      msgEl.textContent = `Karte von ${cardOwner} erkannt.`;
-      msgEl.style.color = '#10b981'; // Grün
-
-      // Kurze Verzögerung für die Animation, dann speichern
-      setTimeout(async () => {
-        await executeFinalLoan();
-      }, 1000);
-
-    } else {
-      // Karte nicht in der DB gefunden
-      iconEl.textContent = '❌';
-      titleEl.textContent = 'Zugriff verweigert';
-      msgEl.textContent = `Unbekannte Karte (${hexCode}).`;
-      msgEl.style.color = '#ef4444'; // Rot
-    }
-  } catch (err) {
-    console.error('Kartenprüfungsfehler:', err);
-    msgEl.textContent = 'Datenbank-Fehler bei der Kartenprüfung.';
-    msgEl.style.color = '#ef4444';
-  }
-}
-
-// Führt das eigentliche POST-Event an Supabase aus, nachdem die Karte gültig war
-async function executeFinalLoan() {
-  if (!pendingLoanData) return;
-  const { loanPayload, isModal } = pendingLoanData;
-
-  try {
-    const res = await fetch(`${SUPABASE_URL}/loans`, { 
-      method: 'POST', 
-      headers: supabaseHeaders, 
-      body: JSON.stringify(loanPayload) 
-    });
-    
-    if(!res.ok) throw new Error('Fehler beim finalen Speichern der Ausleihe');
-    
-    loans.push(loanPayload);
-    selectedUserForLoan = null;
-    pendingLoanData = null;
-
-    // Modals schließen und UI aktualisieren
-    document.getElementById('modal-scanner').style.display = 'none';
-    document.onclick = null; // Klick-Fokus entfernen
-    
-    if (isModal) {
-      closeModal('modal-loan');
-    } else {
-      initQuickTab();
-    }
-    
-    renderAll();
-    showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
-  } catch(err) {
-    document.getElementById('modal-scanner').style.display = 'none';
-    alert(err.message);
   }
 }
 
@@ -833,13 +765,11 @@ async function returnAsset(loanId) {
   const loan  = loans.find(l => l.id === loanId);
   if (!loan) return;
   const asset = assets.find(a => a.id === loan.assetId);
-  
   const historyData = { assetId: loan.assetId, assetName: asset ? asset.name : '?', person: loan.person, userId: loan.userId || '', loanDate: loan.date, returnDate: new Date().toISOString().split('T')[0] };
 
   try {
     const resDel = await fetch(`${SUPABASE_URL}/loans?id=eq.${loanId}`, { method: 'DELETE', headers: supabaseHeaders });
-    if(!resDel.ok) throw new Error('Fehler beim Entfernen der Ausleihe');
-
+    if(!resDel.ok) throw new Error('Fehler beim Entfernen');
     await fetch(`${SUPABASE_URL}/history`, { method: 'POST', headers: supabaseHeaders, body: JSON.stringify(historyData) });
 
     loans = loans.filter(l => l.id !== loanId);
@@ -858,12 +788,13 @@ function exportExcel() {
   XLSX.writeFile(wb, 'AssetTrack_Export.xlsx');
 }
 
-// ===== INIT =====
+// ===== INITIALISIERUNG =====
 initRole();
 loadAllDataFromSupabase();
 </script>
 </body>
 </html>
+
 
 
 
