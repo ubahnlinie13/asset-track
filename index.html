@@ -309,16 +309,27 @@ let currentRole   = localStorage.getItem('am_role') || 'admin';
 async function loadAllDataFromSupabase() {
   setUserStatus('loading', 'Lade Datenbank...');
   try {
-    // 1. User laden (dein alter Code)
-    const resUsers = await fetch(`${SUPABASE_URL}/User_Data?select=Name,Axa%20Windows%20ID,Email&limit=500`, { headers: supabaseHeaders });
-    if (resUsers.ok) {
-      const dataUsers = await resUsers.json();
-      importedUsers = dataUsers.map(row => ({
-        id: row['Axa Windows ID'] || '',
-        name: row['Name'] || '',
-        email: row['Email'] || ''
-      })).filter(u => u.name);
-    }
+    // 1. Assets laden
+    const resAssets = await fetch(`${SUPABASE_URL}/assets?select=*`, { headers: supabaseHeaders });
+    if (resAssets.ok) assets = await resAssets.json();
+
+    // 2. Aktive Ausleihen laden
+    const resLoans = await fetch(`${SUPABASE_URL}/loans?select=*`, { headers: supabaseHeaders });
+    if (resLoans.ok) loans = await resLoans.json();
+
+    // 3. Historie laden
+    const resHist = await fetch(`${SUPABASE_URL}/history?select=*`, { headers: supabaseHeaders });
+    if (resHist.ok) history = await resHist.json();
+
+    // Status setzen (unabhängig von einer lokalen User-Liste)
+    setUserStatus('ok', `Daten live synchronisiert`);
+    renderAll();
+
+  } catch (err) {
+    console.error('Fehler beim Laden der Supabase-Daten:', err);
+    setUserStatus('error', 'Datenbank-Verbindung fehlgeschlagen');
+  }
+}
 
     // 2. Assets laden
     const resAssets = await fetch(`${SUPABASE_URL}/assets?select=*`, { headers: supabaseHeaders });
@@ -492,15 +503,23 @@ function searchForReturn(selectedNameOrId) {
   }).join('') + `</div>`;
 }
 
-// ===== AUTOFILL =====
+// Ein globaler State, um den aktuell ausgewählten User für die Validierung zu speichern
+let selectedUserForLoan = null;
+
 async function handleUserAutofill(inputEl, type, isModal = false) {
   const prefix = isModal ? 'loan-' : 'quick-';
   const val    = inputEl.value.trim();
   const listEl = document.getElementById(prefix + (type === 'name' ? 'person' : 'userid') + '-suggestions');
-  if (val.length < 2) { listEl.style.display = 'none'; return; }
+  
+  // WICHTIG BEI 300K USER CORRECTIONS: Erst ab 3 Zeichen suchen, um die DB zu schonen!
+  if (val.length < 3) { 
+    listEl.style.display = 'none'; 
+    return; 
+  }
 
   try {
     const encoded = encodeURIComponent(val);
+    // Wir suchen live in Supabase nach Name ODER Windows ID
     const res = await fetch(
       `${SUPABASE_URL}/User_Data?select=Name,Axa%20Windows%20ID&or=(Name.ilike.*${encoded}*,Axa%20Windows%20ID.ilike.*${encoded}*)&limit=10`,
       { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
@@ -508,11 +527,13 @@ async function handleUserAutofill(inputEl, type, isModal = false) {
     const data = await res.json();
     if (!data.length) { listEl.style.display = 'none'; return; }
 
-    listEl.innerHTML = data.map(u =>
-      `<div class="autofill-suggestion-item" onclick="selectUserSuggestion('${u.Name.replace(/'/g,"\\'")}','${(u['Axa Windows ID']||'').replace(/'/g,"\\'")}','${prefix}')">
+    listEl.innerHTML = data.map(u => {
+      const safeName = u.Name.replace(/'/g, "\\'");
+      const safeId = (u['Axa Windows ID'] || '').replace(/'/g, "\\'");
+      return `<div class="autofill-suggestion-item" onclick="selectUserSuggestion('${safeName}','${safeId}','${prefix}')">
         <span>${u.Name}</span><span class="autofill-id">${u['Axa Windows ID'] || ''}</span>
-      </div>`
-    ).join('');
+      </div>`;
+    }).join('');
     listEl.style.display = 'block';
   } catch (err) {
     console.error('Autofill error:', err);
@@ -522,7 +543,11 @@ async function handleUserAutofill(inputEl, type, isModal = false) {
 function selectUserSuggestion(name, id, prefix) {
   document.getElementById(prefix + 'person').value = name;
   document.getElementById(prefix + 'userid').value = id;
-  document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.display = 'none');
+  
+  // Wir merken uns, dass ein gültiger User aus der DB gewählt wurde
+  selectedUserForLoan = { name, id };
+  
+  document.querySelectorAll('.autofill-suggestions').forEach(el => el.style.style.display = 'none');
 }
 
 async function handleReturnAutofill(inputEl) {
@@ -657,8 +682,12 @@ async function saveLoan() {
   const userId  = document.getElementById('loan-userid').value.trim();
   if (!person || !assetId) return;
 
-  const userExists = importedUsers.some(u => u.name.toLowerCase() === person.toLowerCase());
-  if (!userExists) { showNotification('Fehler', 'Benutzer nicht in der User-Liste gefunden!', 'error'); return; }
+  // Validierung für die 300k User:
+  // Wir prüfen, ob der User über die Autofill-Liste ausgewählt wurde
+  if (!selectedUserForLoan || selectedUserForLoan.name.toLowerCase() !== person.toLowerCase()) {
+    showNotification('Fehler', 'Bitte wähle einen gültigen Benutzer aus der Vorschlagsliste aus!', 'error');
+    return;
+  }
   
   const newLoan = { id: Date.now().toString(), assetId, person, userId, date: document.getElementById('loan-date').value };
 
@@ -671,6 +700,10 @@ async function saveLoan() {
     if(!res.ok) throw new Error('Fehler beim Speichern der Ausleihe');
 
     loans.push(newLoan);
+    
+    // Nach erfolgreichem Speichern den temporären User zurücksetzen
+    selectedUserForLoan = null;
+    
     renderAll(); closeModal('modal-loan');
     showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
   } catch(err) {
