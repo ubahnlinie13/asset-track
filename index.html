@@ -304,6 +304,7 @@ function saveToStorage() {
 }
 
 <script>
+
 async function loadUsersFromSupabase() {
   setUserStatus('loading', 'Verbindung wird geprüft...');
 
@@ -318,7 +319,6 @@ async function loadUsersFromSupabase() {
       }
     );
 
-    // Better error handling
     if (!res.ok) {
       const errorText = await res.text();
       throw new Error(`HTTP ${res.status}: ${errorText}`);
@@ -326,52 +326,20 @@ async function loadUsersFromSupabase() {
 
     const data = await res.json();
 
-    console.log('Successfully fetched rows from Supabase:', data);
-
-    // Normalize columns
     importedUsers = data.map(row => ({
-      id: row['Axa Windows ID'] || row['axa_windows_id'] || '',
-      name: row['Name'] || row['name'] || '',
-      email: row['Email'] || row['email'] || ''
+      id: row['Axa Windows ID'] || '',
+      name: row['Name'] || '',
+      email: row['Email'] || ''
     })).filter(u => u.name);
 
     setUserStatus('ok', `${importedUsers.length} User geladen`);
 
   } catch (err) {
-    console.error('Supabase Core Error Details:', err);
+    console.error('Supabase error:', err);
     setUserStatus('error', 'User konnten nicht geladen werden');
   }
 }
-</script>
-
-    // 2. Clear error reporting if the gateway rejects us
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`HTTP ${res.status}: ${errorText}`);
-    }
-
-    const data = await res.json();
-    console.log("Successfully fetched rows from Supabase:", data);
-
-    // 3. Spalten mappen: Fallbacks added for case sensitivity (e.g. Name vs name)
-    importedUsers = data.map(row => ({
-      id:    row['Axa Windows ID'] || row['axa_windows_id'] || '',
-      name:  row['Name']           || row['name']           || '',
-      email: row['Email']          || row['email']          || ''
-    })).filter(u => u.name);
-
-    setUserStatus('ok', `${importedUsers.length} User geladen`);
-  } catch (err) {
-    setUserStatus('error', 'User konnten nicht geladen werden');
-    console.error('Supabase Core Error Details:', err);
-  }
-}
-function setUserStatus(state, text) {
-  const dot  = document.getElementById('user-status-dot');
-  const span = document.getElementById('user-status-text');
-  dot.className  = 'user-status-dot ' + state;
-  span.textContent = text;
-}
+  
 
 // ===== NOTIFICATION =====
 function showNotification(title, message, type = 'success') {
