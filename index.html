@@ -424,7 +424,6 @@ function openAddCard() {
   const hexInput = document.getElementById('card-hex');
   hexInput.value = '';
   document.getElementById('modal-card').classList.add('open');
-  // Scanner-Input für automatisches Einlesen
   setTimeout(() => hexInput.focus(), 100);
   hexInput.onkeydown = function(e) {
     if (e.key === 'Enter' && this.value.trim().length > 0) e.preventDefault();
@@ -730,15 +729,10 @@ async function executeFinalLoan() {
   if (!pendingLoanData) return;
   const { loanPayload, isModal } = pendingLoanData;
 
-  // Wir bauen das Payload sicherer auf
+  // Verbessertes Payload mit eingebautem Fehler-Feedback
   const dbPayload = {
-    // 1. Wenn deine 'id' in Supabase automatisch generiert wird (UUID/Identity), 
-    //    kommentiere die nächste Zeile aus, um Konflikte zu vermeiden:
-    id: loanPayload.id, 
-
-    // 2. Falls assetId in der DB eine Zahl (Integer) ist, nutze: parseInt(loanPayload.assetId)
-    assetId: loanPayload.assetId, 
-    
+    id: loanPayload.id,
+    assetId: loanPayload.assetId, // Korrigierter Spaltenname
     person: loanPayload.person,
     userId: loanPayload.userId,
     date: loanPayload.date
@@ -752,10 +746,9 @@ async function executeFinalLoan() {
     });
     
     if (!res.ok) {
-      // Das hilft uns massiv beim Debuggen: Text der Fehlermeldung auslesen
-      const errorText = await res.text();
-      console.error("Supabase Fehler-Details:", errorText);
-      throw new Error(`Fehler beim Speichern: ${res.status} - ${errorText}`);
+      const errorDetails = await res.text();
+      console.error("Supabase Error Details:", errorDetails);
+      throw new Error(`Fehler: ${res.status} - ${errorDetails}`);
     }
 
     loans.push(loanPayload);
@@ -769,35 +762,8 @@ async function executeFinalLoan() {
     renderAll();
     showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
   } catch(err) { 
-    // Zeigt dir jetzt die echte Ursache im Browser an
-    alert(err.message); 
+    alert("Kritischer Fehler beim Speichern: " + err.message); 
   }
-}
-
-  const dbPayload = {
-    assetId: loanPayload.assetId,
-    person: loanPayload.person,
-    userId: loanPayload.userId,
-    date: loanPayload.date
-  };
-
-  try {
-    const res = await fetch(`${SUPABASE_URL}/loans`, {
-      method: 'POST', headers: supabaseHeaders, body: JSON.stringify(dbPayload)
-    });
-    if (!res.ok) throw new Error('Fehler beim Speichern');
-
-    loans.push(loanPayload);
-    selectedUserForLoan = null;
-    pendingLoanData = null;
-
-    document.getElementById('modal-scanner').style.display = 'none';
-    document.onclick = null;
-
-    if (isModal) closeModal('modal-loan'); else initQuickTab();
-    renderAll();
-    showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
-  } catch(err) { alert(err.message); }
 }
 
 function searchForReturn(selectedNameOrId) {
