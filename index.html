@@ -730,8 +730,51 @@ async function executeFinalLoan() {
   if (!pendingLoanData) return;
   const { loanPayload, isModal } = pendingLoanData;
 
+  // Wir bauen das Payload sicherer auf
   const dbPayload = {
-    id: loanPayload.id,
+    // 1. Wenn deine 'id' in Supabase automatisch generiert wird (UUID/Identity), 
+    //    kommentiere die nächste Zeile aus, um Konflikte zu vermeiden:
+    id: loanPayload.id, 
+
+    // 2. Falls assetId in der DB eine Zahl (Integer) ist, nutze: parseInt(loanPayload.assetId)
+    assetId: loanPayload.assetId, 
+    
+    person: loanPayload.person,
+    userId: loanPayload.userId,
+    date: loanPayload.date
+  };
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/loans`, {
+      method: 'POST', 
+      headers: supabaseHeaders, 
+      body: JSON.stringify(dbPayload)
+    });
+    
+    if (!res.ok) {
+      // Das hilft uns massiv beim Debuggen: Text der Fehlermeldung auslesen
+      const errorText = await res.text();
+      console.error("Supabase Fehler-Details:", errorText);
+      throw new Error(`Fehler beim Speichern: ${res.status} - ${errorText}`);
+    }
+
+    loans.push(loanPayload);
+    selectedUserForLoan = null;
+    pendingLoanData = null;
+
+    document.getElementById('modal-scanner').style.display = 'none';
+    document.onclick = null;
+
+    if (isModal) closeModal('modal-loan'); else initQuickTab();
+    renderAll();
+    showNotification('Erfolg', 'Ausleihe erfolgreich erfasst!', 'success');
+  } catch(err) { 
+    // Zeigt dir jetzt die echte Ursache im Browser an
+    alert(err.message); 
+  }
+}
+
+  const dbPayload = {
     assetId: loanPayload.assetId,
     person: loanPayload.person,
     userId: loanPayload.userId,
