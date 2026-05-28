@@ -194,6 +194,8 @@
 
     
 <header>
+
+  <header id="app-header" style="display:none">  
   <h1>Asset<span>Track</span></h1>
   <div class="header-actions">
     <div class="user-status">
@@ -211,7 +213,7 @@
   </div>
 </header>
 
-<div class="tabs">
+<div class="tabs" id="app-tabs" style="display:none">
   <div class="tab admin-only" id="tab-dashboard" onclick="switchTab('dashboard')">Dashboard</div>
   <div class="tab admin-only" id="tab-assets" onclick="switchTab('assets')">Assets</div>
   <div class="tab admin-only" id="tab-loans" onclick="switchTab('loans')">Ausleihen</div>
@@ -438,8 +440,10 @@ async function initAuth() {
 }
 
 function authSuccess(user) {
-  document.body.classList.remove('locked');
   document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('app-header').style.display = 'flex';
+  document.getElementById('app-tabs').style.display = 'flex';
+  document.getElementById('app-main').style.display = 'block';
   setUserStatus('ok', user.email);
 }
 
