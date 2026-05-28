@@ -172,21 +172,24 @@
       // Nur für registrierte Nutzer
     </p>
 
-    <div id="auth-form-wrap">
-      <div class="form-group">
-        <label>E-Mail Adresse</label>
-        <input type="email" id="auth-email-input" placeholder="du@example.com"
-          onkeydown="if(event.key==='Enter') authSendLink()">
-      </div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px"
-        id="auth-send-btn" onclick="authSendLink()">
-        Magic Link senden
-      </button>
-      <p id="auth-msg" style="margin-top:12px; font-size:13px; font-family:'DM Mono',monospace; min-height:20px;"></p>
-    </div>
+<div id="auth-form-wrap">
+  <div class="form-group">
+    <label>E-Mail Adresse</label>
+    <input type="email" id="auth-email-input" placeholder="du@example.com">
   </div>
+  <div class="form-group">
+    <label>Passwort</label>
+    <input type="password" id="auth-password-input" placeholder="••••••••"
+      onkeydown="if(event.key==='Enter') authSignIn()">
+  </div>
+  <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px"
+    id="auth-send-btn" onclick="authSignIn()">
+    Einloggen
+  </button>
+  <p id="auth-msg" style="margin-top:12px; font-size:13px; font-family:'DM Mono',monospace; min-height:20px;"></p>
 </div>
 
+    
 <header>
   <h1>Asset<span>Track</span></h1>
   <div class="header-actions">
@@ -384,49 +387,29 @@
 const SUPABASE_URL = 'https://ugdoqrbiampugaivjisy.supabase.co/rest/v1';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVnZG9xcmJpYW1wdWdhaXZqaXN5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTA5NTM3MSwiZXhwIjoyMDk0NjcxMzcxfQ.dxV2mRs6ECXsPFNgcrqFT2VQVlQXyqYeM7UQdNGVNKw';
 
-  // ===== AUTH =====
+// ===== AUTH =====
 const SUPABASE_BASE = 'https://ugdoqrbiampugaivjisy.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVnZG9xcmJpYW1wdWdhaXZqaXN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwOTUzNzEsImV4cCI6MjA5NDY3MTM3MX0.1SqyAvEf-WF2tvzdmoMlS8pu72AJMDsiF-EsTiDL4xQ';
+const SUPABASE_ANON = 'DEIN_ANON_KEY';
 
 const { createClient } = supabase;
 const authClient = createClient(SUPABASE_BASE, SUPABASE_ANON);
 
-async function authSendLink() {
-  const email = document.getElementById('auth-email-input').value.trim();
-  const btn   = document.getElementById('auth-send-btn');
-  const msg   = document.getElementById('auth-msg');
+async function authSignIn() {
+  const email    = document.getElementById('auth-email-input').value.trim();
+  const password = document.getElementById('auth-password-input').value;
+  const btn      = document.getElementById('auth-send-btn');
 
-  if (!email) { authMsg('E-Mail eingeben.', 'var(--danger)'); return; }
+  if (!email || !password) { authMsg('Email und Passwort eingeben.', 'var(--danger)'); return; }
 
   btn.disabled = true;
-  btn.textContent = 'Prüfe...';
+  btn.textContent = 'Einloggen...';
 
-  const { data, error } = await authClient
-    .from('whitelist')
-    .select('email')
-    .eq('email', email)
-    .single();
+  const { error } = await authClient.auth.signInWithPassword({ email, password });
 
-  if (error || !data) {
-    authMsg('✗ Nicht freigegeben.', 'var(--danger)');
+  if (error) {
+    authMsg('✗ Falsche Email oder Passwort.', 'var(--danger)');
     btn.disabled = false;
-    btn.textContent = 'Magic Link senden';
-    return;
-  }
-
-  btn.textContent = 'Sende...';
-  const { error: otpErr } = await authClient.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.href }
-  });
-
-  if (otpErr) {
-    authMsg(otpErr.message, 'var(--danger)');
-    btn.disabled = false;
-    btn.textContent = 'Magic Link senden';
-  } else {
-    authMsg('✓ Link gesendet! Postfach checken.', 'var(--green)');
-    btn.textContent = 'Gesendet ✓';
+    btn.textContent = 'Einloggen';
   }
 }
 
@@ -442,6 +425,7 @@ async function initAuth() {
 
   authClient.auth.onAuthStateChange((_event, session) => {
     if (session) authSuccess(session.user);
+    else { document.getElementById('auth-gate').style.display = 'flex'; }
   });
 }
 
