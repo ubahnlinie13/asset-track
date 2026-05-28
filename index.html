@@ -191,12 +191,10 @@
   </button>
   <p id="auth-msg" style="margin-top:12px; font-size:13px; font-family:'DM Mono',monospace; min-height:20px;"></p>
 </div>
-
     
-<header>
-
-  <header id="app-header" style="display:none">  
-  <h1>Asset<span>Track</span></h1>
+    <header id="app-header" style="display:none">  
+  
+      <h1>Asset<span>Track</span></h1>
   <div class="header-actions">
     <div class="user-status">
       <div class="user-status-dot loading" id="user-status-dot"></div>
@@ -222,7 +220,7 @@
   <div class="tab" id="tab-quick" onclick="switchTab('quick')">Schnellzugang</div>
 </div>
 
-<main>
+<main id="app-main" style="display:none">
 
   <!-- DASHBOARD -->
   <div class="view admin-only" id="view-dashboard">
@@ -394,7 +392,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // ===== AUTH =====
 const SUPABASE_BASE = 'https://ugdoqrbiampugaivjisy.supabase.co';
-const SUPABASE_ANON = 'DEIN_ANON_KEY';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVnZG9xcmJpYW1wdWdhaXZqaXN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwOTUzNzEsImV4cCI6MjA5NDY3MTM3MX0.1SqyAvEf-WF2tvzdmoMlS8pu72AJMDsiF-EsTiDL4xQ';
 
 const { createClient } = supabase;
 const authClient = createClient(SUPABASE_BASE, SUPABASE_ANON);
