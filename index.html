@@ -438,6 +438,7 @@ async function initAuth() {
 }
 
 function authSuccess(user) {
+  document.body.classList.remove('locked');
   document.getElementById('auth-gate').style.display = 'none';
   document.getElementById('app-header').style.display = 'flex';
   document.getElementById('app-tabs').style.display = 'flex';
