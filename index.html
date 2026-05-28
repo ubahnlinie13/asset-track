@@ -152,8 +152,11 @@
   .autofill-suggestion-item { padding: 10px 14px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
   .autofill-suggestion-item:hover { background: var(--border); color: var(--accent); }
   .autofill-id { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 11px; }
+.scan-hint { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 8px; }
 
-  .scan-hint { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 8px; }
+  body.locked { overflow: hidden; pointer-events: none; }
+#auth-gate { pointer-events: all; }
+
 </style>
 </head>
 <body>
@@ -420,16 +423,22 @@ function authMsg(text, color) {
 }
 
 async function initAuth() {
+  document.body.classList.add('locked');
+
   const { data: { session } } = await authClient.auth.getSession();
   if (session) authSuccess(session.user);
 
   authClient.auth.onAuthStateChange((_event, session) => {
     if (session) authSuccess(session.user);
-    else { document.getElementById('auth-gate').style.display = 'flex'; }
+    else {
+      document.body.classList.add('locked');
+      document.getElementById('auth-gate').style.display = 'flex';
+    }
   });
 }
 
 function authSuccess(user) {
+  document.body.classList.remove('locked');
   document.getElementById('auth-gate').style.display = 'none';
   setUserStatus('ok', user.email);
 }
